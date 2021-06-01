@@ -83,7 +83,7 @@ class Resolver[Ctx](
       immediatelyResolveDeferred(
         userContext,
         dr,
-        _.map { case (Result(errors, data, _)) =>
+        _.map { case Result(errors, data, _) =>
           errors.originalErrors ->
             marshalResult(
               data.asInstanceOf[Option[resultResolver.marshaller.Node]],
@@ -950,62 +950,6 @@ class Resolver[Ctx](
     }
   }
 
-  def collectProjections(
-      path: ExecutionPath,
-      field: Field[Ctx, _],
-      astFields: Vector[ast.Field],
-      maxLevel: Int): Vector[ProjectedName] = {
-    def loop(
-        path: ExecutionPath,
-        tpe: OutputType[_],
-        astFields: Vector[ast.Field],
-        currLevel: Int): Vector[ProjectedName] =
-      if (currLevel > maxLevel) Vector.empty
-      else
-        tpe match {
-          case OptionType(ofType) => loop(path, ofType, astFields, currLevel)
-          case ListType(ofType) => loop(path, ofType, astFields, currLevel)
-          case objTpe: ObjectType[Ctx, _] =>
-            fieldCollector.collectFields(path, objTpe, astFields) match {
-              case Success(ff) =>
-                ff.fields.collect {
-                  case CollectedField(_, _, Success(fields))
-                      if objTpe.getField(schema, fields.head.name).nonEmpty && !objTpe
-                        .getField(schema, fields.head.name)
-                        .head
-                        .tags
-                        .contains(ProjectionExclude) =>
-                    val astField = fields.head
-                    val field = objTpe.getField(schema, astField.name).head
-                    val projectionNames = field.tags.collect { case ProjectionName(name) => name }
-
-                    val projectedName =
-                      if (projectionNames.nonEmpty) projectionNames.toVector
-                      else Vector(field.name)
-
-                    projectedName.map(name =>
-                      ProjectedName(
-                        name,
-                        loop(path.add(astField, objTpe), field.fieldType, fields, currLevel + 1),
-                        Args(field, astField, variables)))
-                }.flatten
-              case Failure(_) => Vector.empty
-            }
-          case abst: AbstractType =>
-            schema.possibleTypes
-              .get(abst.name)
-              .map(
-                _.flatMap(loop(path, _, astFields, currLevel + 1))
-                  .groupBy(_.name)
-                  .map(_._2.head)
-                  .toVector)
-              .getOrElse(Vector.empty)
-          case _ => Vector.empty
-        }
-
-    loop(path, field.fieldType, astFields, 1)
-  }
-
   def isOptional(tpe: ObjectType[_, _], fieldName: String): Boolean =
     isOptional(tpe.getField(schema, fieldName).head.fieldType)
 
@@ -1132,11 +1076,6 @@ class Resolver[Ctx](
 
   object SeqRes {
     def apply(value: SeqFutRes): SeqRes = SeqRes(Future.successful(value), null, null)
-    def apply(value: SeqFutRes, defer: Defer): SeqRes =
-      SeqRes(Future.successful(value), defer, null)
-    def apply(value: SeqFutRes, deferFut: Future[Vector[Defer]]): SeqRes =
-      SeqRes(Future.successful(value), null, deferFut)
-
     def apply(value: Future[SeqFutRes]): SeqRes = SeqRes(value, null, null)
     def apply(value: Future[SeqFutRes], defer: Defer): SeqRes = SeqRes(value, defer, null)
     def apply(value: Future[SeqFutRes], deferFut: Future[Vector[Defer]]): SeqRes =

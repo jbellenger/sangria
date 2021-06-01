@@ -20,5 +20,3 @@ object FieldTag {
 }
 
 case class SubscriptionField[S[_]](stream: SubscriptionStream[S]) extends FieldTag
-
-case class Extension[In](data: In)(implicit val iu: InputUnmarshaller[In])

@@ -220,33 +220,4 @@ class ResultResolver(
   }
 }
 
-object ResultResolver {
-  def marshalExtensions(
-      marshaller: ResultMarshaller,
-      extensions: Seq[Extension[_]]): Option[marshaller.Node] = {
-    import scala.collection.mutable
-    import sangria.marshalling.MarshallingUtil._
-
-    implicit val m = SimpleResultMarshallerForType[marshaller.Node](marshaller)
-    val res = new mutable.LinkedHashMap[String, marshaller.Node]
-
-    extensions.foreach { e =>
-      val eAny = e.asInstanceOf[Extension[Any]]
-
-      implicit val iu = eAny.iu
-
-      if (iu.isMapNode(eAny.data)) {
-        iu.getMapKeys(e.data).map { key =>
-          iu.getMapValue(e.data, key).foreach { value =>
-            res(key) = value.convertMarshaled[marshaller.Node]
-          }
-        }
-      }
-    }
-
-    if (res.nonEmpty) Some(marshaller.mapNode(res.toVector))
-    else None
-  }
-}
-
 case class RegisteredError(path: ExecutionPath, error: Throwable, position: Option[AstLocation])
