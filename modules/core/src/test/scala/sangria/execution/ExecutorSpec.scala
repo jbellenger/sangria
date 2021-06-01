@@ -204,69 +204,6 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
         .await should be(expected)
     }
 
-    "prepare and execute arbitrary queries" in {
-      val doc = gql"""
-        query Example($$size: Int) {
-          a,
-          b,
-          x: c
-          ...c
-          f
-          ...on DataType {
-            pic(size: $$size)
-            future {
-              a
-            }
-          }
-          deep {
-            a
-            b
-            c
-            deeper {
-              a
-              b
-            }
-          }
-        }
-
-        fragment c on DataType {
-          d
-          e
-        }
-      """
-
-      val expected = Map(
-        "data" -> Map(
-          "a" -> "Apple",
-          "b" -> "Banana",
-          "x" -> "Cookie",
-          "d" -> "Donut",
-          "e" -> "Egg",
-          "f" -> "Fish",
-          "pic" -> "Pic of size: 100",
-          "future" -> Map("a" -> "Apple"),
-          "deep" -> Map(
-            "a" -> "Already Been Done",
-            "b" -> "Boring",
-            "c" -> List("Contrived", null, "Confusing"),
-            "deeper" -> List(
-              Map("a" -> "Apple", "b" -> "Banana"),
-              null,
-              Map("a" -> "Apple", "b" -> "Banana")
-            )
-          )
-        )
-      )
-
-      val schema = Schema(DataType)
-
-      val preparedQuery = Executor
-        .prepare(schema, doc, Ctx(), new TestSubject, variables = mapVars(Map("size" -> 100)))
-        .await
-
-      preparedQuery.execute().await should be(expected)
-    }
-
     "[regression] execute queries with reducers that use variables" in {
       val doc = gql"""
         query Example($$size: Int) {
@@ -317,48 +254,6 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
           queryReducers = PicSizeFinderReducer :: Nil)
         .await should be(expected)
       sizeValue should be(100)
-    }
-
-    "prepare should validate in the preparation stage" in {
-      val doc = gql"""
-        query Example($$size: String) {
-          ...on DataType {
-            pic(size: $$size)
-          }
-        }
-      """
-
-      val schema = Schema(DataType)
-
-      an[ValidationError] should be thrownBy
-        Executor
-          .prepare(schema, doc, Ctx(), new TestSubject, variables = mapVars(Map("size" -> 100)))
-          .await
-    }
-
-    "prepare should execute query reducers in the preparation stage" in {
-      val doc = gql"""
-        {
-          __schema {
-            queryType {name}
-          }
-        }
-      """
-
-      val schema = Schema(DataType)
-
-      val introQR = QueryReducer.hasIntrospection[Ctx]((hasIntro, ctx) =>
-        ctx.copy(color = if (hasIntro) "red" else "blue"))
-      val failQR = QueryReducer.hasIntrospection[Ctx]((hasIntro, ctx) =>
-        if (hasIntro) throw new IllegalStateException("foo") else ctx)
-
-      an[QueryReducingError] should be thrownBy
-        Executor.prepare(schema, doc, Ctx(), new TestSubject, queryReducers = failQR :: Nil).await
-
-      val prepared =
-        Executor.prepare(schema, doc, Ctx(), new TestSubject, queryReducers = introQR :: Nil).await
-
-      prepared.userContext.color should be("red")
     }
 
     "respect max depth level" in {
