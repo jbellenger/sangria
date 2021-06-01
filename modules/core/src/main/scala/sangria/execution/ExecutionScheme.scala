@@ -1,7 +1,5 @@
 package sangria.execution
 
-import sangria.streaming.SubscriptionStream
-
 import scala.concurrent.{ExecutionContext, Future}
 
 sealed trait ExecutionScheme {
@@ -37,10 +35,6 @@ object ExecutionScheme extends AlternativeExecutionScheme {
 }
 
 trait AlternativeExecutionScheme {
-  trait StreamBasedExecutionScheme[S[_]] {
-    def subscriptionStream: SubscriptionStream[S]
-  }
-
   implicit object Extended extends ExecutionScheme {
     type Result[Ctx, T] = Future[ExecutionResult[Ctx, T]]
 
@@ -59,56 +53,10 @@ trait AlternativeExecutionScheme {
 
     def extended = true
   }
-
-  implicit def Stream[S[_]](implicit
-      stream: SubscriptionStream[S]): ExecutionScheme with StreamBasedExecutionScheme[S] {
-    type Result[Ctx, T] = S[T]
-  } =
-    new ExecutionScheme with StreamBasedExecutionScheme[S] {
-      type Result[Ctx, T] = S[T]
-
-      def subscriptionStream = stream
-      def extended = false
-
-      def failed[Ctx, Res](error: Throwable): Result[Ctx, Res] =
-        stream.failed(error)
-
-      def onComplete[Ctx, Res](result: Result[Ctx, Res])(op: => Unit)(implicit
-          ec: ExecutionContext): Result[Ctx, Res] =
-        stream.onComplete(result)(op)
-
-      def flatMapFuture[Ctx, Res, T](future: Future[T])(resultFn: T => Result[Ctx, Res])(implicit
-          ec: ExecutionContext): Result[Ctx, Res] =
-        stream.flatMapFuture(future)(resultFn)
-    }
-
-  implicit def StreamExtended[S[_]](implicit
-      stream: SubscriptionStream[S]): ExecutionScheme with StreamBasedExecutionScheme[S] {
-    type Result[Ctx, T] = S[ExecutionResult[Ctx, T]]
-  } =
-    new ExecutionScheme with StreamBasedExecutionScheme[S] {
-      type Result[Ctx, T] = S[ExecutionResult[Ctx, T]]
-
-      def subscriptionStream = stream
-      def extended = true
-
-      def failed[Ctx, Res](error: Throwable): Result[Ctx, Res] =
-        stream.failed(error)
-
-      def onComplete[Ctx, Res](result: Result[Ctx, Res])(op: => Unit)(implicit
-          ec: ExecutionContext): Result[Ctx, Res] =
-        stream.onComplete(result)(op)
-
-      def flatMapFuture[Ctx, Res, T](future: Future[T])(resultFn: T => Result[Ctx, Res])(implicit
-          ec: ExecutionContext): Result[Ctx, Res] =
-        stream.flatMapFuture(future)(resultFn)
-    }
 }
 
 case class ExecutionResult[Ctx, Res](
     ctx: Ctx,
     result: Res,
-    errors: Vector[RegisteredError],
-    middlewareVals: List[(Any, Middleware[_])],
-    validationTiming: TimeMeasurement,
-    queryReducerTiming: TimeMeasurement)
+    errors: Vector[RegisteredError]
+)

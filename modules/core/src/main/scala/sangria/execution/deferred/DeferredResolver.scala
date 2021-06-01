@@ -25,14 +25,6 @@ object DeferredResolver {
         ec: ExecutionContext) =
       deferred.map(d => Future.failed(UnsupportedDeferError(d)))
   }
-
-  def fetchers[Ctx](fetchers: Fetcher[Ctx, _, _, _]*): DeferredResolver[Ctx] =
-    new FetcherBasedDeferredResolver[Ctx](fetchers.toVector, None)
-
-  def fetchersWithFallback[Ctx](
-      fallback: DeferredResolver[Ctx],
-      fetchers: Fetcher[Ctx, _, _, _]*): DeferredResolver[Ctx] =
-    new FetcherBasedDeferredResolver[Ctx](fetchers.toVector, Some(fallback))
 }
 
 trait Deferred[+T]

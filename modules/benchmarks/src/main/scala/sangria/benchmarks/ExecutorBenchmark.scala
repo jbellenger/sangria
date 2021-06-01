@@ -31,7 +31,7 @@ class ExecutorBenchmark {
     query = mkQuery(breadth, depth)
     val schema = mkSchema(breadth)
 
-    executor = Executor.Default(
+    executor = Executor(
       schema,
       // This benchmark focuses on performance of the underlying Resolver.
       // Let's disable query validation for maximum speed.
