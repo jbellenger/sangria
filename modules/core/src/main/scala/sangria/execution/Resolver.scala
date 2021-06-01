@@ -34,6 +34,9 @@ class Resolver[Ctx](
   import resultResolver._
   import Resolver._
 
+  /**
+   * Resolve fields in parallel. Used for query and subscription operations
+   */
   def resolveFieldsPar(
     tpe: ObjectType[Ctx, _],
     value: Any,
@@ -51,6 +54,9 @@ class Resolver[Ctx](
       scheme)
   }
 
+  /**
+   * Resolve fields sequentially. Used for mutation operations
+   */
   def resolveFieldsSeq(
     tpe: ObjectType[Ctx, _],
     value: Any,
@@ -63,6 +69,9 @@ class Resolver[Ctx](
     handleScheme(result.flatMap(res => processFinalResolve(res._1).map(_ -> res._2)), scheme)
   }
 
+  /**
+   * Apply an ExecutionScheme to the finalResolve value
+   */
   private def handleScheme(
     result: Future[((Vector[RegisteredError], marshaller.Node), Ctx)],
     scheme: ExecutionScheme
@@ -82,7 +91,12 @@ class Resolver[Ctx](
       throw new IllegalStateException(s"Unsupported execution scheme: $s")
   }
 
-  private def processFinalResolve(resolve: Resolve) = resolve match {
+  /**
+   * Finalize a Resolve into a Future of errors and results
+   */
+  private def processFinalResolve(
+    resolve: Resolve
+  ): Future[(Vector[RegisteredError], marshaller.Node)] = resolve match {
     case Result(errors, data, _) =>
       Future.successful(
         errors.originalErrors ->
@@ -125,7 +139,7 @@ class Resolver[Ctx](
   private def resolveDeferredWithGrouping(deferred: Vector[Future[Vector[Defer]]]) =
     Future.sequence(deferred).map(listOfDef => deferredResolver.groupDeferred(listOfDef.flatten))
 
-  def resolveSeq(
+  private def resolveSeq(
     path: ExecutionPath,
     tpe: ObjectType[Ctx, _],
     value: Any,
@@ -318,7 +332,7 @@ class Resolver[Ctx](
     }
   }
 
-  def collectActionsPar(
+  private def collectActionsPar(
     path: ExecutionPath,
     tpe: ObjectType[Ctx, _],
     value: Any,
@@ -407,7 +421,7 @@ class Resolver[Ctx](
             "Subscription values are not supported for normal operations"))))
     }
 
-  def resolveActionsPar(
+  private def resolveActionsPar(
     path: ExecutionPath,
     tpe: ObjectType[Ctx, _],
     actions: Actions,
@@ -657,7 +671,7 @@ class Resolver[Ctx](
       }
     }
 
-  def resolveValue(
+  private def resolveValue(
     path: ExecutionPath,
     astFields: Vector[ast.Field],
     tpe: OutputType[_],
@@ -807,10 +821,10 @@ class Resolver[Ctx](
         }
     }
 
-  def isUndefinedValue(value: Any) =
+  private def isUndefinedValue(value: Any) =
     value == null || value == None
 
-  def resolveSimpleListValue(
+  private def resolveSimpleListValue(
     simpleRes: Seq[Result],
     path: ExecutionPath,
     optional: Boolean,
@@ -844,7 +858,7 @@ class Resolver[Ctx](
     Result(errorReg, if (canceled) None else Some(marshaller.arrayNode(listBuilder.result())))
   }
 
-  def resolveField(
+  private def resolveField(
     userCtx: Ctx,
     tpe: ObjectType[Ctx, _],
     path: ExecutionPath,
@@ -974,13 +988,13 @@ class Resolver[Ctx](
     }
   }
 
-  def isOptional(tpe: ObjectType[_, _], fieldName: String): Boolean =
+  private def isOptional(tpe: ObjectType[_, _], fieldName: String): Boolean =
     isOptional(tpe.getField(schema, fieldName).head.fieldType)
 
-  def isOptional(tpe: OutputType[_]): Boolean =
+  private def isOptional(tpe: OutputType[_]): Boolean =
     tpe.isInstanceOf[OptionType[_]]
 
-  def nullForNotNullTypeError(position: Option[AstLocation]) =
+  private def nullForNotNullTypeError(position: Option[AstLocation]) =
     new ExecutionError(
       "Cannot return null for non-nullable type",
       exceptionHandler,
@@ -997,7 +1011,10 @@ class Resolver[Ctx](
     ]]
   )
 
-  sealed trait Resolve {
+  /**
+   * A normalized interface for the outputs of a field resolver
+   */
+  private sealed trait Resolve {
     def appendErrors(
       path: ExecutionPath,
       errors: Vector[Throwable],
@@ -1005,7 +1022,12 @@ class Resolver[Ctx](
     ): Resolve
   }
 
-  case class DeferredResult(deferred: Vector[Future[Vector[Defer]]], futureValue: Future[Result])
+  /**
+   * A Deferred Resolve, for describing async outputs of a field resolver
+   */
+  private case class DeferredResult(
+    deferred: Vector[Future[Vector[Defer]]],
+    futureValue: Future[Result])
       extends Resolve {
     def appendErrors(
       path: ExecutionPath,
@@ -1017,7 +1039,7 @@ class Resolver[Ctx](
       else this
   }
 
-  case class Defer(
+  private case class Defer(
     promise: Promise[(ChildDeferredContext, Any, Vector[Throwable])],
     deferred: Deferred[Any],
     complexity: Double,
@@ -1025,7 +1047,11 @@ class Resolver[Ctx](
     astFields: Vector[ast.Field],
     args: Args)
       extends DeferredWithInfo
-  case class Result(
+
+  /**
+   * A Resolve that describes synchronous outputs of a field resolver
+   */
+  private case class Result(
     errors: ErrorRegistry,
     value: Option[Any /* Either marshaller.Node or marshaller.MapBuilder */ ],
     userContext: Option[Ctx] = None)
@@ -1064,7 +1090,7 @@ class Resolver[Ctx](
     def builderValue = value.asInstanceOf[Option[marshaller.MapBuilder]]
     def buildValue = copy(value = builderValue.map(marshaller.mapNode))
 
-    def appendErrors(
+    override def appendErrors(
       path: ExecutionPath,
       e: Vector[Throwable],
       position: Option[AstLocation]
@@ -1073,7 +1099,7 @@ class Resolver[Ctx](
       else this
   }
 
-  case class ParentDeferredContext(uc: Ctx, expectedBranches: Int) {
+  private case class ParentDeferredContext(uc: Ctx, expectedBranches: Int) {
     val children =
       Vector.fill(expectedBranches)(ChildDeferredContext(Promise[Vector[Future[Vector[Defer]]]]()))
 
@@ -1087,7 +1113,7 @@ class Resolver[Ctx](
       }
   }
 
-  case class ChildDeferredContext(promise: Promise[Vector[Future[Vector[Defer]]]]) {
+  private case class ChildDeferredContext(promise: Promise[Vector[Future[Vector[Defer]]]]) {
     def resolveDeferredResult(uc: Ctx, res: DeferredResult): Future[Result] = {
       promise.success(res.deferred)
       res.futureValue
@@ -1102,17 +1128,17 @@ class Resolver[Ctx](
       promise.success(Vector.empty)
   }
 
-  sealed trait FieldResolution
-  case class ErrorFieldResolution(errors: ErrorRegistry) extends FieldResolution
-  case class StandardFieldResolution(
+  private sealed trait FieldResolution
+  private case class ErrorFieldResolution(errors: ErrorRegistry) extends FieldResolution
+  private case class StandardFieldResolution(
     errors: ErrorRegistry,
     action: LeafAction[Ctx, Any],
     ctxUpdate: Option[MappedCtxUpdate[Ctx, Any, Any]])
       extends FieldResolution
 
-  case class SeqRes(value: Future[SeqFutRes], defer: Defer, deferFut: Future[Vector[Defer]])
+  private case class SeqRes(value: Future[SeqFutRes], defer: Defer, deferFut: Future[Vector[Defer]])
 
-  object SeqRes {
+  private object SeqRes {
     def apply(value: SeqFutRes): SeqRes = SeqRes(Future.successful(value), null, null)
     def apply(value: Future[SeqFutRes]): SeqRes = SeqRes(value, null, null)
     def apply(value: Future[SeqFutRes], defer: Defer): SeqRes = SeqRes(value, defer, null)
@@ -1120,16 +1146,11 @@ class Resolver[Ctx](
       SeqRes(value, null, deferFut)
   }
 
-  case class SeqFutRes(
+  private case class SeqFutRes(
     value: Any = null,
     errors: Vector[Throwable] = Vector.empty,
     dctx: ChildDeferredContext = null)
 }
-
-case class MappedCtxUpdate[Ctx, Val, NewVal](
-  ctxFn: Val => Ctx,
-  mapFn: Val => NewVal,
-  onError: Throwable => Unit)
 
 object Resolver {
   val DefaultComplexity = 1.0d
@@ -1174,6 +1195,11 @@ object Resolver {
         values.map(v => v.name -> marshalAstValue(v.value, marshaller, typeName, scalarInfo)))
     case ast.VariableValue(name, _, _) => marshaller.enumNode(name, typeName)
   }
+
+  private case class MappedCtxUpdate[Ctx, Val, NewVal](
+    ctxFn: Val => Ctx,
+    mapFn: Val => NewVal,
+    onError: Throwable => Unit)
 }
 
 trait DeferredWithInfo {
