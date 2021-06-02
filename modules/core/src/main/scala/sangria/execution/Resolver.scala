@@ -122,6 +122,12 @@ class Resolver[Ctx](
       )
   }
 
+  /**
+   * Resolve a DeferredResult.
+   * Deferred's allow for deferring resolution to allow for batching to potential backends.
+   * This method *realizes* the deferrment, producing a Future that describes an active call
+   * for a group of batched field resolvers.
+   */
   private def immediatelyResolveDeferred[T](
     uc: Ctx,
     dr: DeferredResult,
@@ -136,7 +142,10 @@ class Resolver[Ctx](
     res
   }
 
-  private def resolveDeferredWithGrouping(deferred: Vector[Future[Vector[Defer]]]) =
+  // JMB NOTE: This doesn't actually resolve Deferred's, it just groups them
+  private def resolveDeferredWithGrouping(
+    deferred: Vector[Future[Vector[Defer]]]
+  ): Future[Vector[Vector[Defer]]] =
     Future.sequence(deferred).map(listOfDef => deferredResolver.groupDeferred(listOfDef.flatten))
 
   private def resolveSeq(
@@ -145,23 +154,27 @@ class Resolver[Ctx](
     value: Any,
     fields: CollectedFields,
     errorReg: ErrorRegistry
-  ): Future[(Result, Ctx)] =
+  ): Future[(Result, Ctx)] = {
     fields.fields
       .foldLeft(
         Future.successful(
           (
             Result(ErrorRegistry.empty, Some(marshaller.emptyMapNode(fields.namesOrdered))),
-            userContext))) {
+            userContext
+          )
+        )
+      ) {
         case (future, elem) =>
           future.flatMap { resAndCtx =>
             (resAndCtx, elem) match {
               case (acc @ (Result(_, None, _), _), _) => Future.successful(acc)
-              case (acc, CollectedField(name, origField, _))
+              case (acc, CollectedField(_, origField, _))
                   if tpe.getField(schema, origField.name).isEmpty =>
                 Future.successful(acc)
               case (
-                    (Result(errors, s @ Some(acc), _), uc),
-                    CollectedField(name, origField, Failure(error))) =>
+                    (Result(errors, Some(acc), _), uc),
+                    CollectedField(_, origField, Failure(error))
+                  ) =>
                 Future.successful(Result(
                   errors.add(path.add(origField, tpe), error),
                   if (isOptional(tpe, origField.name))
@@ -174,7 +187,7 @@ class Resolver[Ctx](
                   else None
                 ) -> uc)
               case (
-                    (accRes @ Result(errors, s @ Some(acc), _), uc),
+                    (accRes @ Result(errors, Some(acc), _), uc),
                     CollectedField(name, origField, Success(fields))) =>
                 resolveSingleFieldSeq(
                   path,
@@ -186,14 +199,15 @@ class Resolver[Ctx](
                   origField,
                   fields,
                   accRes,
-                  acc)
+                  acc
+                )
             }
           }
       }
       .map {
-        case (res, ctx) =>
-          res.buildValue -> ctx
+        case (res, ctx) => res.buildValue -> ctx
       }
+  }
 
   private def resolveSingleFieldSeq(
     path: ExecutionPath,
@@ -332,6 +346,9 @@ class Resolver[Ctx](
     }
   }
 
+  /**
+   * Resolve the fields in a CollectedFields and return a the Actions of the selection set
+   */
   private def collectActionsPar(
     path: ExecutionPath,
     tpe: ObjectType[Ctx, _],
@@ -421,6 +438,9 @@ class Resolver[Ctx](
             "Subscription values are not supported for normal operations"))))
     }
 
+  /**
+   * Recursively resolve
+   */
   private def resolveActionsPar(
     path: ExecutionPath,
     tpe: ObjectType[Ctx, _],
@@ -616,7 +636,7 @@ class Resolver[Ctx](
     }
   }
 
-  private def resolveDeferred(uc: Ctx, toResolve: Vector[Defer]) =
+  private def resolveDeferred(uc: Ctx, toResolve: Vector[Defer]): Unit =
     if (toResolve.nonEmpty) {
       def findActualDeferred(deferred: Deferred[_]): Deferred[_] = deferred match {
         case MappingDeferred(d, _) => findActualDeferred(d)
@@ -906,9 +926,6 @@ class Resolver[Ctx](
                 case resolved: Value[Ctx, Any @unchecked] =>
                   StandardFieldResolution(errors, resolved, None)
 
-                case resolved: PartialValue[Ctx, Any @unchecked] =>
-                  StandardFieldResolution(errors, resolved, None)
-
                 case resolved: TryValue[Ctx, Any @unchecked] =>
                   StandardFieldResolution(errors, resolved, None)
 
@@ -1024,6 +1041,17 @@ class Resolver[Ctx](
 
   /**
    * A Deferred Resolve, for describing async outputs of a field resolver
+   *
+   * You may ask: what is the difference between deferred and a futureValue? Aren't they the same thing?
+   * They are not the same thing. I (JMB) think the difference is:
+   *   - `futureValue` supports the FutureValue action type, which is the simplest kind of async
+   *     resolver output
+   *
+   *   - `deferred` supports the DeferredValue and DeferredFutureValue action types, which are
+   *     an async resolver output that adds a layer of indirection via DeferredResolver.
+   *     Deferreds allows for batching of field resolvers which is not something that is not
+   *     easily done using Futures.
+   *     More on this at https://sangria-graphql.github.io/learn/#deferred-value-resolution
    */
   private case class DeferredResult(
     deferred: Vector[Future[Vector[Defer]]],
@@ -1039,6 +1067,12 @@ class Resolver[Ctx](
       else this
   }
 
+  /**
+   * An implementation of DeferredWithInfo. Essentially a context wrapper around a Deferred.
+   *
+    * The process of resolving a Defer works by fulfilling the [[promise]] on this object.
+   * This means that they are somewhat mutable. See [[resolveDeferred]]
+   */
   private case class Defer(
     promise: Promise[(ChildDeferredContext, Any, Vector[Throwable])],
     deferred: Deferred[Any],
@@ -1056,6 +1090,7 @@ class Resolver[Ctx](
     value: Option[Any /* Either marshaller.Node or marshaller.MapBuilder */ ],
     userContext: Option[Ctx] = None)
       extends Resolve {
+
     def addToMap(
       other: Result,
       key: String,
@@ -1063,40 +1098,52 @@ class Resolver[Ctx](
       path: ExecutionPath,
       position: Option[AstLocation],
       updatedErrors: ErrorRegistry
-    ) =
+    ): Result =
       copy(
         errors =
           if (!optional && other.value.isEmpty && other.errors.isEmpty)
             updatedErrors.add(other.errors).add(path, nullForNotNullTypeError(position))
           else
             updatedErrors.add(other.errors),
-        value =
-          if (optional && other.value.isEmpty)
-            value.map(v =>
-              marshaller.addMapNodeElem(
-                v.asInstanceOf[marshaller.MapBuilder],
-                key,
-                marshaller.nullNode,
-                optional = false))
-          else
-            for { myVal <- value; otherVal <- other.value } yield marshaller.addMapNodeElem(
+        value = if (optional && other.value.isEmpty) {
+          value.map(v =>
+            marshaller.addMapNodeElem(
+              v.asInstanceOf[marshaller.MapBuilder],
+              key,
+              marshaller.nullNode,
+              optional = false
+            ))
+        } else {
+          for {
+            myVal <- value
+            otherVal <- other.value
+          } yield {
+            marshaller.addMapNodeElem(
               myVal.asInstanceOf[marshaller.MapBuilder],
               key,
               otherVal.asInstanceOf[marshaller.Node],
-              optional = false)
+              optional = false
+            )
+          }
+        }
       )
 
-    def nodeValue = value.asInstanceOf[Option[marshaller.Node]]
-    def builderValue = value.asInstanceOf[Option[marshaller.MapBuilder]]
-    def buildValue = copy(value = builderValue.map(marshaller.mapNode))
+    def nodeValue: Option[marshaller.Node] =
+      value.asInstanceOf[Option[marshaller.Node]]
+
+    def builderValue: Option[marshaller.MapBuilder] =
+      value.asInstanceOf[Option[marshaller.MapBuilder]]
+
+    def buildValue: Result = copy(value = builderValue.map(marshaller.mapNode))
 
     override def appendErrors(
       path: ExecutionPath,
       e: Vector[Throwable],
       position: Option[AstLocation]
-    ): Result =
+    ): Result = {
       if (e.nonEmpty) copy(errors = errors.append(path, e, position))
       else this
+    }
   }
 
   private case class ParentDeferredContext(uc: Ctx, expectedBranches: Int) {
@@ -1202,6 +1249,9 @@ object Resolver {
     onError: Throwable => Unit)
 }
 
+/**
+ * An async Deferred, wrapped in some context of where it was encountered during resolution
+ */
 trait DeferredWithInfo {
   def deferred: Deferred[Any]
   def complexity: Double
