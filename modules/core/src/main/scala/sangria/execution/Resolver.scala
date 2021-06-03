@@ -123,9 +123,10 @@ class Resolver[Ctx](
   }
 
   /**
-   * Resolve a DeferredResult.
+   * Resolve a DeferredResult
+   *
    * Deferred's allow for deferring resolution to allow for batching to potential backends.
-   * This method *realizes* the deferrment, producing a Future that describes an active call
+   * This method *realizes* that deferrment, producing a Future that describes an active call
    * for a group of batched field resolvers.
    */
   private def immediatelyResolveDeferred[T](
@@ -148,6 +149,11 @@ class Resolver[Ctx](
   ): Future[Vector[Vector[Defer]]] =
     Future.sequence(deferred).map(listOfDef => deferredResolver.groupDeferred(listOfDef.flatten))
 
+  /**
+   * Resolve a selection set sequentially and realize deferments.
+   *
+   * This primarily supports mutations and is not used in the Query execution path.
+   */
   private def resolveSeq(
     path: ExecutionPath,
     tpe: ObjectType[Ctx, _],
@@ -209,6 +215,11 @@ class Resolver[Ctx](
       }
   }
 
+  /**
+   * Resolve a single field within a sequential execution.
+   *
+   * This primarily supports mutations and is not used in the Query execution path.
+   */
   private def resolveSingleFieldSeq(
     path: ExecutionPath,
     uc: Ctx,
@@ -248,6 +259,11 @@ class Resolver[Ctx](
           resolution)
     }
 
+  /**
+   * Resolve a FieldResolution for non-error fields.
+   *
+   * This primarily supports mutations and is not used in the Query execution path.
+   */
   private def resolveStandardFieldResolutionSeq(
     path: ExecutionPath,
     uc: Ctx,
@@ -347,7 +363,10 @@ class Resolver[Ctx](
   }
 
   /**
-   * Resolve the fields in a CollectedFields and return a the Actions of the selection set
+   * Resolve the fields in a CollectedFields and return the Actions of the selection set
+   *
+   * This is not used for top-level mutation fields. The closest analog to
+   * this method for those fields is [[resolveFieldsSeq]]
    */
   private def collectActionsPar(
     path: ExecutionPath,
@@ -439,7 +458,12 @@ class Resolver[Ctx](
     }
 
   /**
-   * Recursively resolve
+   * Resolve an ordered set of fields on an object, returning a [[Resolve]] that captures either
+   * a synchronous ([[Result]]) or asynchronous ([[DeferredResult]] resolution of these fields.
+   *
+   * This is used to resolve most ObjectType fields. A notable exception is top-level fields
+   * in the mutation schema (which are resolved in [[resolveSeq]]). Objects returned by mutation fields
+   * will be resolved in this method.
    */
   private def resolveActionsPar(
     path: ExecutionPath,
@@ -450,22 +474,24 @@ class Resolver[Ctx](
   ): Resolve = {
     val (errors, res) = actions
 
-    def resolveUc(newUc: Option[MappedCtxUpdate[Ctx, Any, Any]], v: Any) =
+    def resolveUc(newUc: Option[MappedCtxUpdate[Ctx, Any, Any]], v: Any): Ctx =
       newUc.map(_.ctxFn(v)).getOrElse(userCtx)
 
-    def resolveError(newUc: Option[MappedCtxUpdate[Ctx, Any, Any]], e: Throwable) = {
-      try newUc.map(_.onError(e))
-      catch {
+    def resolveError(newUc: Option[MappedCtxUpdate[Ctx, Any, Any]], e: Throwable): Throwable = {
+      try {
+        newUc.map(_.onError(e))
+      } catch {
         case NonFatal(ee) => ee.printStackTrace()
       }
 
       e
     }
 
-    def resolveVal(newUc: Option[MappedCtxUpdate[Ctx, Any, Any]], v: Any) = newUc match {
-      case Some(MappedCtxUpdate(_, mapFn, _)) => mapFn(v)
-      case None => v
-    }
+    def resolveVal(newUc: Option[MappedCtxUpdate[Ctx, Any, Any]], v: Any): Any =
+      newUc match {
+        case Some(MappedCtxUpdate(_, mapFn, _)) => mapFn(v)
+        case None => v
+      }
 
     res match {
       case None => Result(errors, None)
@@ -636,7 +662,13 @@ class Resolver[Ctx](
     }
   }
 
-  private def resolveDeferred(uc: Ctx, toResolve: Vector[Defer]): Unit =
+  /**
+   * Resolve a collection of [[Defer]]s.
+   *
+   * You're maybe wondering why this doesn't return anything. That's because
+   * resolution of Defer's works by mutating a [[Promise]] on each Defer
+   */
+  private def resolveDeferred(uc: Ctx, toResolve: Vector[Defer]): Unit = {
     if (toResolve.nonEmpty) {
       def findActualDeferred(deferred: Deferred[_]): Deferred[_] = deferred match {
         case MappingDeferred(d, _) => findActualDeferred(d)
@@ -690,7 +722,24 @@ class Resolver[Ctx](
         case NonFatal(error) => toResolve.foreach(_.promise.failure(error))
       }
     }
+  }
 
+  /**
+   * For a supplied Any field [[value]], fanout, recurse, or otherwise "handle" it based on the
+   * field type
+   *
+   * Notable examples of this include:
+   *   - for List types, assume that [[value]] is Seq-like and recursively call this
+   *     method with each item in that list
+   *
+   *   - for Object types:
+   *     get a new selection set from [[fieldCollector]],
+   *     collect the actions for that selection set ([[collectionActionsPar]],
+   *     and resolve the actions ([[resolveActionsPar]]) which will in turn call this method
+   *
+   * Any [[value]] sent to this method will already have been transformed by any mapping functions
+   * included in the field [[Action]]
+   */
   private def resolveValue(
     path: ExecutionPath,
     astFields: Vector[ast.Field],
@@ -699,7 +748,7 @@ class Resolver[Ctx](
     value: Any,
     userCtx: Ctx,
     actualType: Option[InputType[_]] = None
-  ): Resolve =
+  ): Resolve = {
     tpe match {
       case OptionType(optTpe) =>
         val actualValue = value match {
@@ -728,9 +777,11 @@ class Resolver[Ctx](
           val simpleRes = res.collect { case r: Result => r }
           val optional = isOptional(listTpe)
 
-          if (simpleRes.size == res.size)
+          // If none of the resolved values in this seq are Deferred, we can call it a "simple" list
+          // and resolve the whole thing in a Result
+          if (simpleRes.size == res.size) {
             resolveSimpleListValue(simpleRes, path, optional, astFields.head.location)
-          else {
+          } else {
             // this is very hot place, so resorting to mutability to minimize the footprint
             val deferredBuilder = new VectorBuilder[Future[Vector[Defer]]]
             val resultFutures = new VectorBuilder[Future[Result]]
@@ -782,20 +833,21 @@ class Resolver[Ctx](
           userCtx,
           Some(scalar))
       case enum: EnumType[Any @unchecked] =>
-        try Result(
-          ErrorRegistry.empty,
-          if (isUndefinedValue(value))
-            None
-          else {
-            val coerced = enum.coerceOutput(value)
-
-            if (isUndefinedValue(coerced))
+        try {
+          Result(
+            ErrorRegistry.empty,
+            if (isUndefinedValue(value))
               None
-            else
-              Some(marshalEnumValue(coerced, marshaller, enum.name))
-          }
-        )
-        catch {
+            else {
+              val coerced = enum.coerceOutput(value)
+
+              if (isUndefinedValue(coerced))
+                None
+              else
+                Some(marshalEnumValue(coerced, marshaller, enum.name))
+            }
+          )
+        } catch {
           case NonFatal(e) => Result(ErrorRegistry(path, e), None)
         }
       case obj: ObjectType[Ctx, _] =>
@@ -840,10 +892,15 @@ class Resolver[Ctx](
           }
         }
     }
+  }
 
   private def isUndefinedValue(value: Any) =
     value == null || value == None
 
+  /**
+   * A "simple list value" is one where all items have [[Resolve]] values that are
+   * synchronous (ie they are [[Result]]), allowing us to synchronously resolve as a Result
+   */
   private def resolveSimpleListValue(
     simpleRes: Seq[Result],
     path: ExecutionPath,
@@ -1018,6 +1075,12 @@ class Resolver[Ctx](
       sourceMapper,
       position.toList)
 
+  /**
+   * Describes the outputs of resolving a selection set.
+   *
+   * Outputs may include errors, [[LeafAction]]'s, and a [[MappedCtxUpdate]] that can produce the
+   * context for each fields subtree.
+   */
   private type Actions = (
     ErrorRegistry,
     Option[Vector[
@@ -1040,7 +1103,8 @@ class Resolver[Ctx](
   }
 
   /**
-   * A Deferred Resolve, for describing async outputs of a field resolver
+   * A Deferred Resolve, for describing async outputs of a field resolver (even outputs
+   * that are not exactly Defer's)
    *
    * You may ask: what is the difference between deferred and a futureValue? Aren't they the same thing?
    * They are not the same thing. I (JMB) think the difference is:
@@ -1070,8 +1134,8 @@ class Resolver[Ctx](
   /**
    * An implementation of DeferredWithInfo. Essentially a context wrapper around a Deferred.
    *
-    * The process of resolving a Defer works by fulfilling the [[promise]] on this object.
-   * This means that they are somewhat mutable. See [[resolveDeferred]]
+   * The process of resolving a Deferred works by fulfilling the [[promise]] on this object.
+   * This makes them mutable. See [[resolveDeferred]]
    */
   private case class Defer(
     promise: Promise[(ChildDeferredContext, Any, Vector[Throwable])],
@@ -1243,6 +1307,10 @@ object Resolver {
     case ast.VariableValue(name, _, _) => marshaller.enumNode(name, typeName)
   }
 
+  /**
+   * A utility class for describing how the value and/or context should be modified
+   * after resolving a Field's subtree
+   */
   private case class MappedCtxUpdate[Ctx, Val, NewVal](
     ctxFn: Val => Ctx,
     mapFn: Val => NewVal,
