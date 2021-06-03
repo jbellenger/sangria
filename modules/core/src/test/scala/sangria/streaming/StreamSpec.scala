@@ -1,5 +1,6 @@
 package sangria.streaming
 
+/*
 import language.postfixOps
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
 import sangria.execution.{ExceptionHandler, Executor, HandledException}
@@ -374,3 +375,4 @@ class StreamSpec extends AnyWordSpec with Matchers with FutureResultSupport {
     }
   }
 }
+ */

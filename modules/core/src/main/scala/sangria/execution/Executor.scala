@@ -139,8 +139,9 @@ case class Executor[Ctx, Root](
           resolver
             .resolveFieldsSeq(tpe, root, fields)(scheme)
             .asInstanceOf[scheme.Result[Ctx, marshaller.Node]]
-      }
 
+        case _ => throw RemovedForSimplification
+      }
     } catch {
       case NonFatal(error) =>
         scheme.failed(error)

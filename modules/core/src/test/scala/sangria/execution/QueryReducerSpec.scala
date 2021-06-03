@@ -16,6 +16,7 @@ import scala.util.{Failure, Success}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
+/*
 class QueryReducerSpec extends AnyWordSpec with Matchers with FutureResultSupport {
   case class ATag(num: Int) extends FieldTag
   case object BTag extends FieldTag
@@ -1009,3 +1010,4 @@ class QueryReducerSpec extends AnyWordSpec with Matchers with FutureResultSuppor
     }
   }
 }
+ */

@@ -13,6 +13,7 @@ import sangria.util.SimpleGraphQlSupport._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
+/*
 class BatchExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
   implicit val ec: ExecutionContext = ExecutionContext.global
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
@@ -468,3 +469,4 @@ class BatchExecutorSpec extends AnyWordSpec with Matchers with FutureResultSuppo
     }
   }
 }
+ */
