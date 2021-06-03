@@ -1,13 +1,13 @@
 package sangria.execution
 
-import sangria.ast.AstLocation
 import sangria.ast
+import sangria.ast.AstLocation
 import sangria.execution.deferred.{Deferred, DeferredResolver}
 import sangria.marshalling.{ResultMarshaller, ScalarValueInfo}
 import sangria.parser.SourceMapper
 import sangria.schema._
-
 import scala.collection.immutable.VectorBuilder
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
@@ -31,8 +31,8 @@ class Resolver[Ctx](
   implicit executionContext: ExecutionContext) {
   val resultResolver = new ResultResolver(marshaller, exceptionHandler, preserveOriginalErrors)
 
-  import resultResolver._
   import Resolver._
+  import resultResolver._
 
   /**
    * Resolve fields in parallel. Used for query and subscription operations
@@ -154,9 +154,11 @@ class Resolver[Ctx](
    * It only groups them
    */
   private def resolveDeferredWithGrouping(
-    deferred: Vector[Future[Vector[Defer]]]
+    deferred: Seq[Future[Array[Defer]]]
   ): Future[Vector[Vector[Defer]]] =
-    Future.sequence(deferred).map(listOfDef => deferredResolver.groupDeferred(listOfDef.flatten))
+    Future
+      .sequence(deferred).map(listOfDef =>
+        deferredResolver.groupDeferred(listOfDef.flatten.toVector))
 
   /**
    * Resolve a selection set sequentially and realize deferments.
@@ -237,7 +239,7 @@ class Resolver[Ctx](
     errors: ErrorRegistry,
     name: String,
     origField: ast.Field,
-    fields: Vector[ast.Field],
+    fields: Array[ast.Field],
     accRes: Result,
     acc: Any // from `accRes`
   ): Future[(Result, Ctx)] =
@@ -279,7 +281,7 @@ class Resolver[Ctx](
     tpe: ObjectType[Ctx, _],
     name: String,
     origField: ast.Field,
-    fields: Vector[ast.Field],
+    fields: Array[ast.Field],
     accRes: Result,
     acc: Any, // from `accRes`
     resolution: StandardFieldResolution
@@ -394,15 +396,15 @@ class Resolver[Ctx](
     fields: CollectedFields,
     errorReg: ErrorRegistry,
     userCtx: Ctx
-  ): Actions =
-    fields.fields.foldLeft((errorReg, Some(Vector.empty)): Actions) {
+  ): Actions = {
+    fields.fields.foldLeft((errorReg, CollectedActions.SomeEmpty): Actions) {
       case (acc @ (_, None), _) => acc
       case (acc, CollectedField(name, origField, _))
           if tpe.getField(schema, origField.name).isEmpty =>
         acc
       case ((errors, s @ Some(acc)), CollectedField(name, origField, Failure(error))) =>
         errors.add(path.add(origField, tpe), error) -> (if (isOptional(tpe, origField.name))
-                                                          Some(acc :+ (Vector(origField) -> None))
+                                                          Some(acc :+ (Array(origField) -> None))
                                                         else None)
       case ((errors, s @ Some(acc)), CollectedField(name, origField, Success(fields))) =>
         resolveField(userCtx, tpe, path.add(origField, tpe), value, errors, name, fields) match {
@@ -411,10 +413,11 @@ class Resolver[Ctx](
               acc :+ (fields -> Some(
                 (tpe.getField(schema, origField.name).head, updateCtx, result))))
           case ErrorFieldResolution(updatedErrors) if isOptional(tpe, origField.name) =>
-            updatedErrors -> Some(acc :+ (Vector(origField) -> None))
+            updatedErrors -> Some(acc :+ (Array(origField) -> None))
           case ErrorFieldResolution(updatedErrors) => updatedErrors -> None
         }
     }
+  }
 
   /**
    * Resolve an ordered set of fields on an object, returning a [[Resolve]] that captures either
@@ -429,7 +432,7 @@ class Resolver[Ctx](
     tpe: ObjectType[Ctx, _],
     actions: Actions,
     userCtx: Ctx,
-    fieldsNamesOrdered: Vector[String]
+    fieldsNamesOrdered: Array[String]
   ): Resolve = {
     val (errors, res) = actions
 
@@ -481,7 +484,7 @@ class Resolver[Ctx](
             val defer = Defer(promise, deferred, complexity, field, astFields, args)
 
             astFields.head -> DeferredResult(
-              Vector(Future.successful(Vector(defer))),
+              Array(Future.successful(Array(defer))),
               promise.future
                 .flatMap {
                   case (dctx, v, es) =>
@@ -532,7 +535,7 @@ class Resolver[Ctx](
         else {
           val allDeferred = complexRes.flatMap(_._2.deferred)
           val finalValue = Future
-            .sequence(complexRes.map {
+            .sequence(complexRes.toSeq.map {
               case (astField, DeferredResult(_, future)) =>
                 future.map(astField -> _)
             })
@@ -636,7 +639,7 @@ class Resolver[Ctx](
    */
   private def resolveValue(
     path: ExecutionPath,
-    astFields: Vector[ast.Field],
+    astFields: Array[ast.Field],
     tpe: OutputType[_],
     field: Field[Ctx, _],
     value: Any,
@@ -677,7 +680,7 @@ class Resolver[Ctx](
             resolveSimpleListValue(simpleRes, path, optional, astFields.head.location)
           } else {
             // this is very hot place, so resorting to mutability to minimize the footprint
-            val deferredBuilder = new VectorBuilder[Future[Vector[Defer]]]
+            val deferredBuilder = mutable.ArrayBuilder.make[Future[Array[Defer]]]
             val resultFutures = new VectorBuilder[Future[Result]]
 
             val resIt = res.iterator
@@ -836,7 +839,7 @@ class Resolver[Ctx](
     value: Any,
     errors: ErrorRegistry,
     name: String,
-    astFields: Vector[ast.Field]
+    astFields: Array[ast.Field]
   ): FieldResolution = {
     val astField = astFields.head
     val allFields = tpe.getField(schema, astField.name).asInstanceOf[Vector[Field[Ctx, Any]]]
@@ -975,15 +978,19 @@ class Resolver[Ctx](
    * Outputs may include errors, [[LeafAction]]'s, and a [[MappedCtxUpdate]] that can produce the
    * context for each fields subtree.
    */
-  private type Actions = (
-    ErrorRegistry,
-    Option[Vector[
+  private type CollectedActions =
+    Option[Array[
       (
-        Vector[ast.Field],
+        Array[ast.Field],
         Option[(Field[Ctx, _], Option[MappedCtxUpdate[Ctx, Any, Any]], LeafAction[Ctx, _])]
       )
     ]]
-  )
+
+  private object CollectedActions {
+    val SomeEmpty: CollectedActions = Some(Array.empty)
+  }
+
+  private type Actions = (ErrorRegistry, CollectedActions)
 
   /**
    * A normalized interface for the outputs of a field resolver
@@ -1012,7 +1019,7 @@ class Resolver[Ctx](
    *     More on this at https://sangria-graphql.github.io/learn/#deferred-value-resolution
    */
   private case class DeferredResult(
-    deferred: Vector[Future[Vector[Defer]]],
+    deferred: Seq[Future[Array[Defer]]],
     futureValue: Future[Result])
       extends Resolve {
     def appendErrors(
@@ -1036,7 +1043,7 @@ class Resolver[Ctx](
     deferred: Deferred[Any],
     complexity: Double,
     field: Field[_, _],
-    astFields: Vector[ast.Field],
+    astFields: Array[ast.Field],
     args: Args)
       extends DeferredWithInfo
 
@@ -1106,7 +1113,7 @@ class Resolver[Ctx](
 
   private case class ParentDeferredContext(uc: Ctx, expectedBranches: Int) {
     val children =
-      Vector.fill(expectedBranches)(ChildDeferredContext(Promise[Vector[Future[Vector[Defer]]]]()))
+      Seq.fill(expectedBranches)(ChildDeferredContext(Promise[Seq[Future[Array[Defer]]]]()))
 
     def init(): Unit =
       Future.sequence(children.map(_.promise.future)).onComplete { res =>
@@ -1118,7 +1125,7 @@ class Resolver[Ctx](
       }
   }
 
-  private case class ChildDeferredContext(promise: Promise[Vector[Future[Vector[Defer]]]]) {
+  private case class ChildDeferredContext(promise: Promise[Seq[Future[Array[Defer]]]]) {
     def resolveDeferredResult(uc: Ctx, res: DeferredResult): Future[Result] = {
       promise.success(res.deferred)
       res.futureValue
@@ -1209,6 +1216,6 @@ trait DeferredWithInfo {
   def deferred: Deferred[Any]
   def complexity: Double
   def field: Field[_, _]
-  def astFields: Vector[ast.Field]
+  def astFields: Array[ast.Field]
   def args: Args
 }

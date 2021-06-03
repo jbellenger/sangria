@@ -10,25 +10,27 @@ import scala.collection.mutable.{ArrayBuffer, Map => MutableMap, Set => MutableS
 import scala.util.{Failure, Success, Try}
 
 class FieldCollector[Ctx, Val](
-    schema: Schema[Ctx, Val],
-    document: ast.Document,
-    variables: Map[String, VariableValue],
-    sourceMapper: Option[SourceMapper],
-    valueCollector: ValueCollector[Ctx, _],
-    exceptionHandler: ExceptionHandler) {
+  schema: Schema[Ctx, Val],
+  document: ast.Document,
+  variables: Map[String, VariableValue],
+  sourceMapper: Option[SourceMapper],
+  valueCollector: ValueCollector[Ctx, _],
+  exceptionHandler: ExceptionHandler) {
 
   private val resultCache = Cache.empty[(ExecutionPath.PathCacheKey, String), Try[CollectedFields]]
 
   def collectFields(
-      path: ExecutionPath,
-      tpe: ObjectType[Ctx, _],
-      selections: Vector[ast.SelectionContainer]): Try[CollectedFields] =
+    path: ExecutionPath,
+    tpe: ObjectType[Ctx, _],
+    selections: Array[_ <: ast.SelectionContainer]
+  ): Try[CollectedFields] =
     resultCache.getOrElseUpdate(
       path.cacheKey -> tpe.name, {
         val builder: Try[CollectedFieldsBuilder] = Success(new CollectedFieldsBuilder)
 
-        selections.foldLeft(builder) { case (acc, s) =>
-          collectFieldsInternal(tpe, s.selections, MutableSet.empty, acc)
+        selections.foldLeft(builder) {
+          case (acc, s) =>
+            collectFieldsInternal(tpe, s.selections, MutableSet.empty, acc)
         }
 
         builder.map(_.build)
@@ -36,10 +38,11 @@ class FieldCollector[Ctx, Val](
     )
 
   private def collectFieldsInternal(
-      tpe: ObjectType[Ctx, _],
-      selections: Vector[ast.Selection],
-      visitedFragments: MutableSet[String],
-      initial: Try[CollectedFieldsBuilder]): Try[CollectedFieldsBuilder] =
+    tpe: ObjectType[Ctx, _],
+    selections: Vector[ast.Selection],
+    visitedFragments: MutableSet[String],
+    initial: Try[CollectedFieldsBuilder]
+  ): Try[CollectedFieldsBuilder] =
     selections.foldLeft(initial) {
       case (f @ Failure(_), selection) => f
       case (s @ Success(acc), selection) =>
@@ -95,8 +98,9 @@ class FieldCollector[Ctx, Val](
     }
 
   def shouldIncludeNode(
-      directives: Vector[ast.Directive],
-      selection: ast.WithDirectives): Try[Boolean] = {
+    directives: Vector[ast.Directive],
+    selection: ast.WithDirectives
+  ): Try[Boolean] = {
     val possibleDirs = directives
       .map(d =>
         schema.directivesByName
@@ -170,25 +174,33 @@ class FieldCollector[Ctx, Val](
                 exceptionHandler,
                 sourceMapper,
                 d.location.toList))))
-      .map(_.flatMap { case (astDir, dir) =>
-        valueCollector
-          .getArgumentValues(Some(astDir), dir.arguments, astDir.arguments, variables)
-          .map(dir -> _)
+      .map(_.flatMap {
+        case (astDir, dir) =>
+          valueCollector
+            .getArgumentValues(Some(astDir), dir.arguments, astDir.arguments, variables)
+            .map(dir -> _)
       })
 
-    possibleDirs.collect { case Failure(error) => error }.headOption.map(Failure(_)).getOrElse {
-      val validDirs = possibleDirs.collect { case Success(v) => v }
-      val should = validDirs.forall { case (dir, args) =>
-        dir.shouldInclude(DirectiveContext(selection, dir, args))
+    possibleDirs
+      .collectFirst {
+        case Failure(error) => error
       }
+      .map(Failure(_))
+      .getOrElse {
+        val validDirs = possibleDirs.collect { case Success(v) => v }
+        val should = validDirs.forall {
+          case (dir, args) =>
+            dir.shouldInclude(DirectiveContext(selection, dir, args))
+        }
 
-      Success(should)
-    }
+        Success(should)
+      }
   }
 
   def doesFragmentConditionMatch(
-      tpe: ObjectType[_, _],
-      conditional: ast.ConditionalFragment): Try[Boolean] =
+    tpe: ObjectType[_, _],
+    conditional: ast.ConditionalFragment
+  ): Try[Boolean] =
     conditional.typeConditionOpt match {
       case Some(tc) =>
         schema.outputTypes
@@ -208,8 +220,8 @@ class FieldCollector[Ctx, Val](
     }
 }
 
-case class CollectedFields(namesOrdered: Vector[String], fields: Vector[CollectedField])
-case class CollectedField(name: String, field: ast.Field, allFields: Try[Vector[ast.Field]])
+case class CollectedFields(namesOrdered: Array[String], fields: Array[CollectedField])
+case class CollectedField(name: String, field: ast.Field, allFields: Try[Array[ast.Field]])
 
 // Imperative builder to minimize intermediate object creation
 class CollectedFieldsBuilder {
@@ -218,8 +230,9 @@ class CollectedFieldsBuilder {
   private val firstFields = ArrayBuffer[ast.Field]()
   private val fields = ArrayBuffer[Try[ArrayBuffer[ast.Field]]]()
 
-  def contains(name: String) = indexLookup contains name
-  def add(name: String, field: ast.Field) = {
+  def contains(name: String): Boolean = indexLookup contains name
+
+  def add(name: String, field: ast.Field): CollectedFieldsBuilder = {
     indexLookup.get(name) match {
       case Some(idx) =>
         fields(idx) match {
@@ -236,7 +249,7 @@ class CollectedFieldsBuilder {
     this
   }
 
-  def addError(name: String, field: ast.Field, error: Throwable) = {
+  def addError(name: String, field: ast.Field, error: Throwable): CollectedFieldsBuilder = {
     indexLookup.get(name) match {
       case Some(idx) =>
         fields(idx) match {
@@ -255,10 +268,11 @@ class CollectedFieldsBuilder {
   }
 
   def build = {
-    val builtFields = firstFields.toVector.zipWithIndex.map { case (f, idx) =>
-      CollectedField(names(idx), f, fields(idx).map(_.toVector))
+    val builtFields = firstFields.zipWithIndex.map {
+      case (f, idx) =>
+        CollectedField(names(idx), f, fields(idx).map(_.toArray))
     }
 
-    CollectedFields(names.toVector, builtFields)
+    CollectedFields(names.toArray, builtFields.toArray)
   }
 }
