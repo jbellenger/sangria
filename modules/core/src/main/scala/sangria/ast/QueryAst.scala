@@ -13,17 +13,19 @@ import scala.util.control.Breaks._
 import scala.collection.immutable.ListMap
 
 case class Document(
-    definitions: Vector[Definition],
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None,
-    sourceMapper: Option[SourceMapper] = None)
+  definitions: Vector[Definition],
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None,
+  sourceMapper: Option[SourceMapper] = None)
     extends AstNode
     with WithTrailingComments {
-  lazy val operations = Map(definitions.collect { case op: OperationDefinition =>
-    op.name -> op
+  lazy val operations = Map(definitions.collect {
+    case op: OperationDefinition =>
+      op.name -> op
   }: _*)
-  lazy val fragments = Map(definitions.collect { case fragment: FragmentDefinition =>
-    fragment.name -> fragment
+  lazy val fragments = Map(definitions.collect {
+    case fragment: FragmentDefinition =>
+      fragment.name -> fragment
   }: _*)
   lazy val source: Option[String] = sourceMapper.map(_.source)
 
@@ -45,11 +47,11 @@ case class Document(
   override def canEqual(other: Any): Boolean = other.isInstanceOf[Document]
 
   /** Merges two documents. The `sourceMapper` is lost along the way.
-    */
+   */
   def merge(other: Document) = Document.merge(Vector(this, other))
 
   /** An alias for `merge`
-    */
+   */
   def +(other: Document) = merge(other)
 
   lazy val analyzer = DocumentAnalyzer(this)
@@ -76,11 +78,11 @@ case class Document(
 object Document {
 
   /** Provided a collection of ASTs, presumably each from different files,
-    * concatenate the ASTs together into batched AST, useful for validating many
-    * GraphQL source files which together represent one conceptual application.
-    *
+   * concatenate the ASTs together into batched AST, useful for validating many
+   * GraphQL source files which together represent one conceptual application.
+   *
     * The result `Document` will retain correlation to the original `sourceMapper`s.
-    */
+   */
   def merge(documents: Traversable[Document]): Document = {
     val originalSourceMappers = documents.flatMap(_.sourceMapper).toVector
     val sourceMapper =
@@ -91,7 +93,7 @@ object Document {
   }
 
   /** The most basic, but valid document with a stub `Query` type
-    */
+   */
   val emptyStub: Document =
     Document(
       Vector(
@@ -102,50 +104,61 @@ object Document {
 }
 
 case class InputDocument(
-    values: Vector[Value],
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None,
-    sourceMapper: Option[SourceMapper] = None)
+  values: Vector[Value],
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None,
+  sourceMapper: Option[SourceMapper] = None)
     extends AstNode
     with WithTrailingComments {
   lazy val source: Option[String] = sourceMapper.map(_.source)
 
   /** Merges two documents. The `sourceMapper` is lost along the way.
-    */
+   */
   def merge(other: InputDocument) = InputDocument.merge(Vector(this, other))
 
   /** An alias for `merge`
-    */
+   */
   def +(other: InputDocument) = merge(other)
 
   def to[T](
-      schema: Schema[_, _],
-      inputType: InputType[T]
-  )(implicit fromInput: FromInput[T], scheme: DeliveryScheme[Vector[T]]): scheme.Result =
+    schema: Schema[_, _],
+    inputType: InputType[T]
+  )(
+    implicit fromInput: FromInput[T],
+    scheme: DeliveryScheme[Vector[T]]
+  ): scheme.Result =
     InputDocumentMaterializer.to(schema, this, inputType)
 
   def to[T, Vars](
-      schema: Schema[_, _],
-      inputType: InputType[T],
-      variables: Vars
-  )(implicit
-      iu: InputUnmarshaller[Vars],
-      fromInput: FromInput[T],
-      scheme: DeliveryScheme[Vector[T]]): scheme.Result =
+    schema: Schema[_, _],
+    inputType: InputType[T],
+    variables: Vars
+  )(
+    implicit
+    iu: InputUnmarshaller[Vars],
+    fromInput: FromInput[T],
+    scheme: DeliveryScheme[Vector[T]]
+  ): scheme.Result =
     InputDocumentMaterializer.to(schema, this, inputType, variables)
 
-  def to[T](inputType: InputType[T])(implicit
-      fromInput: FromInput[T],
-      scheme: DeliveryScheme[Vector[T]]): scheme.Result =
+  def to[T](
+    inputType: InputType[T]
+  )(
+    implicit
+    fromInput: FromInput[T],
+    scheme: DeliveryScheme[Vector[T]]
+  ): scheme.Result =
     InputDocumentMaterializer.to(this, inputType)
 
   def to[T, Vars](
-      inputType: InputType[T],
-      variables: Vars = InputUnmarshaller.emptyMapVars
-  )(implicit
-      iu: InputUnmarshaller[Vars],
-      fromInput: FromInput[T],
-      scheme: DeliveryScheme[Vector[T]]): scheme.Result =
+    inputType: InputType[T],
+    variables: Vars = InputUnmarshaller.emptyMapVars
+  )(
+    implicit
+    iu: InputUnmarshaller[Vars],
+    fromInput: FromInput[T],
+    scheme: DeliveryScheme[Vector[T]]
+  ): scheme.Result =
     InputDocumentMaterializer.to(this, inputType, variables)
 
   override def equals(other: Any): Boolean = other match {
@@ -189,27 +202,27 @@ sealed trait SelectionContainer extends AstNode with WithComments with WithTrail
 sealed trait Definition extends AstNode
 
 case class OperationDefinition(
-    operationType: OperationType = OperationType.Query,
-    name: Option[String] = None,
-    variables: Vector[VariableDefinition] = Vector.empty,
-    directives: Vector[Directive] = Vector.empty,
-    selections: Vector[Selection],
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  operationType: OperationType = OperationType.Query,
+  name: Option[String] = None,
+  variables: Vector[VariableDefinition] = Vector.empty,
+  directives: Vector[Directive] = Vector.empty,
+  selections: Vector[Selection],
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Definition
     with WithDirectives
     with SelectionContainer
 
 case class FragmentDefinition(
-    name: String,
-    typeCondition: NamedType,
-    directives: Vector[Directive],
-    selections: Vector[Selection],
-    variables: Vector[VariableDefinition] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  typeCondition: NamedType,
+  directives: Vector[Directive],
+  selections: Vector[Selection],
+  variables: Vector[VariableDefinition] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Definition
     with ConditionalFragment
     with WithDirectives
@@ -226,12 +239,12 @@ object OperationType {
 }
 
 case class VariableDefinition(
-    name: String,
-    tpe: Type,
-    defaultValue: Option[Value],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  tpe: Type,
+  defaultValue: Option[Value],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends AstNode
     with WithComments
     with WithDirectives
@@ -260,14 +273,14 @@ sealed trait WithArguments extends AstNode {
 sealed trait Selection extends AstNode with WithDirectives with WithComments
 
 case class Field(
-    alias: Option[String],
-    name: String,
-    arguments: Vector[Argument],
-    directives: Vector[Directive],
-    selections: Vector[Selection],
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  alias: Option[String],
+  name: String,
+  arguments: Vector[Argument],
+  directives: Vector[Directive],
+  selections: Vector[Selection],
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Selection
     with SelectionContainer
     with WithArguments {
@@ -275,19 +288,19 @@ case class Field(
 }
 
 case class FragmentSpread(
-    name: String,
-    directives: Vector[Directive],
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  directives: Vector[Directive],
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Selection
 
 case class InlineFragment(
-    typeCondition: Option[NamedType],
-    directives: Vector[Directive],
-    selections: Vector[Selection],
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  typeCondition: Option[NamedType],
+  directives: Vector[Directive],
+  selections: Vector[Selection],
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Selection
     with ConditionalFragment
     with SelectionContainer {
@@ -304,17 +317,17 @@ sealed trait WithDirectives extends AstNode {
 }
 
 case class Directive(
-    name: String,
-    arguments: Vector[Argument],
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  arguments: Vector[Argument],
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends AstNode
     with WithArguments
 case class Argument(
-    name: String,
-    value: Value,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  value: Value,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends NameValue
 
 sealed trait Value extends AstNode with WithComments {
@@ -324,62 +337,63 @@ sealed trait Value extends AstNode with WithComments {
 sealed trait ScalarValue extends Value
 
 case class IntValue(
-    value: Int,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: Int,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ScalarValue
 case class BigIntValue(
-    value: BigInt,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: BigInt,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ScalarValue
 case class FloatValue(
-    value: Double,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: Double,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ScalarValue
 case class BigDecimalValue(
-    value: BigDecimal,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: BigDecimal,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ScalarValue
 case class StringValue(
-    value: String,
-    block: Boolean = false,
-    blockRawValue: Option[String] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: String,
+  block: Boolean = false,
+  blockRawValue: Option[String] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ScalarValue
 case class BooleanValue(
-    value: Boolean,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: Boolean,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ScalarValue
 case class EnumValue(
-    value: String,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  value: String,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Value
 case class ListValue(
-    values: Vector[Value],
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  values: Vector[Value],
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Value
 case class VariableValue(
-    name: String,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Value
 case class NullValue(comments: Vector[Comment] = Vector.empty, location: Option[AstLocation] = None)
     extends Value
 case class ObjectValue(
-    fields: Vector[ObjectField],
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  fields: Vector[ObjectField],
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends Value {
   lazy val fieldsByName =
-    fields.foldLeft(ListMap.empty[String, Value]) { case (acc, field) =>
-      acc + (field.name -> field.value)
+    fields.foldLeft(ListMap.empty[String, Value]) {
+      case (acc, field) =>
+        acc + (field.name -> field.value)
     }
 }
 
@@ -389,10 +403,10 @@ object ObjectValue {
 }
 
 case class ObjectField(
-    name: String,
-    value: Value,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  value: Value,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends NameValue
 
 case class Comment(text: String, location: Option[AstLocation] = None) extends AstNode
@@ -400,49 +414,49 @@ case class Comment(text: String, location: Option[AstLocation] = None) extends A
 // Schema Definition
 
 case class ScalarTypeDefinition(
-    name: String,
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeDefinition
     with WithDescription {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class FieldDefinition(
-    name: String,
-    fieldType: Type,
-    arguments: Vector[InputValueDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  fieldType: Type,
+  arguments: Vector[InputValueDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends SchemaAstNode
     with WithDirectives
     with WithDescription
 
 case class InputValueDefinition(
-    name: String,
-    valueType: Type,
-    defaultValue: Option[Value],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  valueType: Type,
+  defaultValue: Option[Value],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends SchemaAstNode
     with WithDirectives
     with WithDescription
 
 case class ObjectTypeDefinition(
-    name: String,
-    interfaces: Vector[NamedType],
-    fields: Vector[FieldDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  interfaces: Vector[NamedType],
+  fields: Vector[FieldDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeDefinition
     with WithTrailingComments
     with WithDescription {
@@ -450,13 +464,13 @@ case class ObjectTypeDefinition(
 }
 
 case class InterfaceTypeDefinition(
-    name: String,
-    fields: Vector[FieldDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  fields: Vector[FieldDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeDefinition
     with WithTrailingComments
     with WithDescription {
@@ -464,25 +478,25 @@ case class InterfaceTypeDefinition(
 }
 
 case class UnionTypeDefinition(
-    name: String,
-    types: Vector[NamedType],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  types: Vector[NamedType],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeDefinition
     with WithDescription {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class EnumTypeDefinition(
-    name: String,
-    values: Vector[EnumValueDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  values: Vector[EnumValueDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeDefinition
     with WithTrailingComments
     with WithDescription {
@@ -490,23 +504,23 @@ case class EnumTypeDefinition(
 }
 
 case class EnumValueDefinition(
-    name: String,
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends SchemaAstNode
     with WithDirectives
     with WithDescription
 
 case class InputObjectTypeDefinition(
-    name: String,
-    fields: Vector[InputValueDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  fields: Vector[InputValueDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeDefinition
     with WithTrailingComments
     with WithDescription {
@@ -514,116 +528,116 @@ case class InputObjectTypeDefinition(
 }
 
 case class ObjectTypeExtensionDefinition(
-    name: String,
-    interfaces: Vector[NamedType],
-    fields: Vector[FieldDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  interfaces: Vector[NamedType],
+  fields: Vector[FieldDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ObjectLikeTypeExtensionDefinition
     with WithTrailingComments {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class InterfaceTypeExtensionDefinition(
-    name: String,
-    fields: Vector[FieldDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  fields: Vector[FieldDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends ObjectLikeTypeExtensionDefinition
     with WithTrailingComments {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class InputObjectTypeExtensionDefinition(
-    name: String,
-    fields: Vector[InputValueDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  fields: Vector[InputValueDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeExtensionDefinition
     with WithTrailingComments {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class EnumTypeExtensionDefinition(
-    name: String,
-    values: Vector[EnumValueDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  values: Vector[EnumValueDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeExtensionDefinition
     with WithTrailingComments {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class UnionTypeExtensionDefinition(
-    name: String,
-    types: Vector[NamedType],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  types: Vector[NamedType],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeExtensionDefinition {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class ScalarTypeExtensionDefinition(
-    name: String,
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeExtensionDefinition {
   def rename(newName: String) = copy(name = newName)
 }
 
 case class SchemaExtensionDefinition(
-    operationTypes: Vector[OperationTypeDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  operationTypes: Vector[OperationTypeDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeSystemExtensionDefinition
     with WithDirectives
     with WithTrailingComments
 
 case class DirectiveDefinition(
-    name: String,
-    arguments: Vector[InputValueDefinition],
-    locations: Vector[DirectiveLocation],
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  arguments: Vector[InputValueDefinition],
+  locations: Vector[DirectiveLocation],
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeSystemDefinition
     with WithDescription
 
 case class DirectiveLocation(
-    name: String,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  name: String,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends SchemaAstNode
 
 case class SchemaDefinition(
-    operationTypes: Vector[OperationTypeDefinition],
-    directives: Vector[Directive] = Vector.empty,
-    description: Option[StringValue] = None,
-    comments: Vector[Comment] = Vector.empty,
-    trailingComments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  operationTypes: Vector[OperationTypeDefinition],
+  directives: Vector[Directive] = Vector.empty,
+  description: Option[StringValue] = None,
+  comments: Vector[Comment] = Vector.empty,
+  trailingComments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends TypeSystemDefinition
     with WithDescription
     with WithTrailingComments
     with WithDirectives
 
 case class OperationTypeDefinition(
-    operation: OperationType,
-    tpe: NamedType,
-    comments: Vector[Comment] = Vector.empty,
-    location: Option[AstLocation] = None)
+  operation: OperationType,
+  tpe: NamedType,
+  comments: Vector[Comment] = Vector.empty,
+  location: Option[AstLocation] = None)
     extends SchemaAstNode
 
 case class AstLocation(sourceId: String, index: Int, line: Int, column: Int)
@@ -649,8 +663,12 @@ sealed trait AstNode {
   def visitAstWithTypeInfo(schema: Schema[_, _])(visitorFn: TypeInfo => AstVisitor): this.type =
     AstVisitor.visitAstWithTypeInfo[this.type](schema, this)(visitorFn)
 
-  def visitAstWithState[S](schema: Schema[_, _], state: S)(
-      visitorFn: (TypeInfo, S) => AstVisitor): S =
+  def visitAstWithState[S](
+    schema: Schema[_, _],
+    state: S
+  )(
+    visitorFn: (TypeInfo, S) => AstVisitor
+  ): S =
     AstVisitor.visitAstWithState(schema, this, state)(visitorFn)
 }
 
@@ -691,25 +709,26 @@ trait AstVisitor {
 }
 
 case class DefaultAstVisitor(
-    override val onEnter: PartialFunction[AstNode, VisitorCommand] = { case _ =>
+  override val onEnter: PartialFunction[AstNode, VisitorCommand] = {
+    case _ =>
       VisitorCommand.Continue
-    },
-    override val onLeave: PartialFunction[AstNode, VisitorCommand] = { case _ =>
+  },
+  override val onLeave: PartialFunction[AstNode, VisitorCommand] = {
+    case _ =>
       VisitorCommand.Continue
-    }
-) extends AstVisitor
+  }) extends AstVisitor
 
 object AstVisitor {
   import AstVisitorCommand._
 
   def apply(
-      onEnter: PartialFunction[AstNode, VisitorCommand] = { case _ => VisitorCommand.Continue },
-      onLeave: PartialFunction[AstNode, VisitorCommand] = { case _ => VisitorCommand.Continue }
+    onEnter: PartialFunction[AstNode, VisitorCommand] = { case _ => VisitorCommand.Continue },
+    onLeave: PartialFunction[AstNode, VisitorCommand] = { case _ => VisitorCommand.Continue }
   ) = DefaultAstVisitor(onEnter, onLeave)
 
   def simple(
-      onEnter: PartialFunction[AstNode, Unit] = { case _ => () },
-      onLeave: PartialFunction[AstNode, Unit] = { case _ => () }
+    onEnter: PartialFunction[AstNode, Unit] = { case _ => () },
+    onLeave: PartialFunction[AstNode, Unit] = { case _ => () }
   ) = DefaultAstVisitor(
     {
       case node if onEnter.isDefinedAt(node) =>
@@ -732,8 +751,12 @@ object AstVisitor {
         if (visitor.onLeave.isDefinedAt(node)) visitor.onLeave(node) else VisitorCommand.Continue
     )
 
-  def visitAstWithTypeInfo[T <: AstNode](schema: Schema[_, _], root: T)(
-      visitorFn: TypeInfo => AstVisitor): T = {
+  def visitAstWithTypeInfo[T <: AstNode](
+    schema: Schema[_, _],
+    root: T
+  )(
+    visitorFn: TypeInfo => AstVisitor
+  ): T = {
     val typeInfo = new TypeInfo(schema)
     val visitor = visitorFn(typeInfo)
 
@@ -750,8 +773,13 @@ object AstVisitor {
     )
   }
 
-  def visitAstWithState[S](schema: Schema[_, _], root: AstNode, state: S)(
-      visitorFn: (TypeInfo, S) => AstVisitor): S = {
+  def visitAstWithState[S](
+    schema: Schema[_, _],
+    root: AstNode,
+    state: S
+  )(
+    visitorFn: (TypeInfo, S) => AstVisitor
+  ): S = {
     val typeInfo = new TypeInfo(schema)
     val visitor = visitorFn(typeInfo, state)
 
@@ -771,15 +799,17 @@ object AstVisitor {
   }
 
   def visit[T <: AstNode](
-      root: T,
-      onEnter: AstNode => VisitorCommand,
-      onLeave: AstNode => VisitorCommand): T =
+    root: T,
+    onEnter: AstNode => VisitorCommand,
+    onLeave: AstNode => VisitorCommand
+  ): T =
     sangria.visitor.visit[AstNode](root, Visit[AstNode](onEnter, onLeave)).asInstanceOf[T]
 
   private[sangria] def visitAstRecursive(
-      doc: AstNode,
-      onEnter: AstNode => AstVisitorCommand.Value = _ => Continue,
-      onLeave: AstNode => AstVisitorCommand.Value = _ => Continue): Unit = {
+    doc: AstNode,
+    onEnter: AstNode => AstVisitorCommand.Value = _ => Continue,
+    onLeave: AstNode => AstVisitorCommand.Value = _ => Continue
+  ): Unit = {
 
     def breakOrSkip(cmd: AstVisitorCommand.Value) = cmd match {
       case Break => break()

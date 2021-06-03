@@ -4,24 +4,31 @@ import sangria.marshalling.ResultMarshaller
 import sangria.ast
 import sangria.schema.ObjectType
 
-case class ExecutionPath private (path: Vector[Any], cacheKeyPath: ExecutionPath.PathCacheKey) {
-  def add(field: ast.Field, parentType: ObjectType[_, _]) =
-    new ExecutionPath(path :+ field.outputName, cacheKey :+ field.outputName :+ parentType.name)
+case class ExecutionPath private (
+  path: List[Any],
+  cacheKeyPath: ExecutionPath.PathCacheKey,
+  private val cacheKeyPathSize: Int) {
+  def add(field: ast.Field, parentType: ObjectType[_, _]): ExecutionPath =
+    copy(
+      field.outputName :: path,
+      field.outputName :: parentType.name :: cacheKeyPath,
+      cacheKeyPathSize + 2)
 
-  def withIndex(idx: Int) = new ExecutionPath(path :+ idx, cacheKey)
+  def withIndex(idx: Int) = new ExecutionPath(idx :: path, cacheKey, cacheKeyPathSize + 1)
 
   def isEmpty = path.isEmpty
   def nonEmpty = path.nonEmpty
 
   /** @return last index in the path, if available
-    */
-  def lastIndex: Option[Int] = path.lastOption.collect { case i: Int => i }
+   */
+  def lastIndex: Option[Int] = path.headOption.collect { case i: Int => i }
 
   /** @return the size of the path excluding the indexes
-    */
-  def size = cacheKeyPath.size / 2
+   */
+  def size = cacheKeyPathSize / 2
 
-  def marshal(m: ResultMarshaller): m.Node = m.arrayNode(path.map {
+  // JMB TODO: change marshalling arrayNode to accept any old Seq
+  def marshal(m: ResultMarshaller): m.Node = m.arrayNode(path.toVector.reverse.map {
     case s: String => m.scalarNode(s, "String", Set.empty)
     case i: Int => m.scalarNode(i, "Int", Set.empty)
   })
@@ -39,7 +46,7 @@ case class ExecutionPath private (path: Vector[Any], cacheKeyPath: ExecutionPath
 }
 
 object ExecutionPath {
-  type PathCacheKey = Vector[String]
+  type PathCacheKey = List[String]
 
-  val empty = new ExecutionPath(Vector.empty, Vector.empty)
+  val empty = new ExecutionPath(Nil, Nil, 0)
 }

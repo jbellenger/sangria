@@ -11,7 +11,6 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
-import sun.reflect.generics.reflectiveObjects.NotImplementedException
 
 class Resolver[Ctx](
   val marshaller: ResultMarshaller,
@@ -78,13 +77,16 @@ class Resolver[Ctx](
     scheme: ExecutionScheme
   ): scheme.Result[Ctx, marshaller.Node] = scheme match {
     case ExecutionScheme.Default =>
-      result.map { case ((_, res), _) => res }.asInstanceOf[scheme.Result[Ctx, marshaller.Node]]
+      result
+        .map {
+          case ((_, res), _) => res
+        }
+        .asInstanceOf[scheme.Result[Ctx, marshaller.Node]]
 
     case ExecutionScheme.Extended =>
       result
         .map {
-          case ((errors, res), uc) =>
-            ExecutionResult(uc, res, errors)
+          case ((errors, res), uc) => ExecutionResult(uc, res, errors)
         }
         .asInstanceOf[scheme.Result[Ctx, marshaller.Node]]
 
@@ -884,36 +886,6 @@ class Resolver[Ctx](
                 case resolved: Value[Ctx, Any @unchecked] =>
                   StandardFieldResolution(errors, resolved, None)
 
-                case resolved: TryValue[Ctx, Any @unchecked] =>
-                  StandardFieldResolution(errors, resolved, None)
-
-                case res: SequenceLeafAction[Ctx, _] =>
-                  StandardFieldResolution(
-                    errors,
-                    res,
-                    Some(
-                      MappedCtxUpdate(
-                        _ => userCtx,
-                        identity,
-                        _ => ()
-                      )
-                    )
-                  )
-
-                case res: MappedSequenceLeafAction[Ctx, Any @unchecked, Any @unchecked] =>
-                  val mapFn = res.mapFn.asInstanceOf[Any => Any]
-                  StandardFieldResolution(
-                    errors,
-                    res.action,
-                    Some(
-                      MappedCtxUpdate(
-                        _ => userCtx,
-                        mapFn,
-                        _ => ()
-                      )
-                    )
-                  )
-
                 case resolved: LeafAction[Ctx, Any @unchecked] =>
                   StandardFieldResolution(
                     errors,
@@ -995,6 +967,20 @@ class Resolver[Ctx](
   }
 
   private type Actions = (ErrorRegistry, CollectedActions)
+
+  private sealed trait CollectedActions2
+  private object CollectedActions2 {
+    case object None extends CollectedActions2
+    case object Empty extends CollectedActions2
+
+    case class ResolvedAction(
+      schemaField: Field[Ctx, _],
+      update: Option[MappedCtxUpdate[Ctx, Any, Any]],
+      action: LeafAction[Ctx, _])
+    case class Actions(fields: Array[ast.Field], schemaField: Field[Ctx, _], action: ResolvedAction)
+  }
+
+  private case class Actions2(errors: ErrorRegistry, actions: CollectedActions2)
 
   /**
    * A normalized interface for the outputs of a field resolver

@@ -44,7 +44,7 @@ class FieldCollector[Ctx, Val](
     initial: Try[CollectedFieldsBuilder]
   ): Try[CollectedFieldsBuilder] =
     selections.foldLeft(initial) {
-      case (f @ Failure(_), selection) => f
+      case (f @ Failure(_), _) => f
       case (s @ Success(acc), selection) =>
         selection match {
           case field @ ast.Field(_, _, _, dirs, _, _, _, _) =>
@@ -223,7 +223,7 @@ class FieldCollector[Ctx, Val](
 case class CollectedFields(namesOrdered: Array[String], fields: Array[CollectedField])
 case class CollectedField(name: String, field: ast.Field, allFields: Try[Array[ast.Field]])
 
-// Imperative builder to minimize intermediate object creation
+// Mutable builder to minimize intermediate object creation
 class CollectedFieldsBuilder {
   private val indexLookup = MutableMap[String, Int]()
   private val names = ArrayBuffer[String]()
@@ -267,7 +267,7 @@ class CollectedFieldsBuilder {
     this
   }
 
-  def build = {
+  def build: CollectedFields = {
     val builtFields = firstFields.zipWithIndex.map {
       case (f, idx) =>
         CollectedField(names(idx), f, fields(idx).map(_.toArray))

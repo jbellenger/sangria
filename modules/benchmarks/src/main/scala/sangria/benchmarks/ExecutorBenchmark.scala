@@ -82,9 +82,10 @@ class ExecutorBenchmark {
   private def leafFieldName(i: Int): String = s"leaf_$i"
 
   private def mkField(
-      name: String,
-      fieldType: OutputType[_],
-      resolve: Context[UCtx, Any] => Action[UCtx, Any]): Field[UCtx, Any] =
+    name: String,
+    fieldType: OutputType[_],
+    resolve: Context[UCtx, Any] => Action[UCtx, Any]
+  ): Field[UCtx, Any] =
     new Field(
       name,
       fieldType,

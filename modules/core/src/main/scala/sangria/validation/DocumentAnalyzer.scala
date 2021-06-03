@@ -4,7 +4,6 @@ import sangria.ast
 import sangria.ast.{FragmentDefinition, FragmentSpread, OperationDefinition}
 import sangria.schema.{AstSchemaGenericResolver, ResolverBasedAstSchemaBuilder}
 import sangria.util.Cache
-
 import scala.collection.mutable.{ListBuffer, Set => MutableSet}
 
 case class DocumentAnalyzer(document: ast.Document) {
@@ -38,7 +37,8 @@ case class DocumentAnalyzer(document: ast.Document) {
     )
 
   def getRecursivelyReferencedFragments(
-      operation: ast.OperationDefinition): Vector[FragmentDefinition] =
+    operation: ast.OperationDefinition
+  ): Vector[FragmentDefinition] =
     recursivelyReferencedFragmentsCache.getOrElseUpdate(
       operation.cacheKeyHash, {
         val frags = ListBuffer[ast.FragmentDefinition]()
@@ -70,8 +70,9 @@ case class DocumentAnalyzer(document: ast.Document) {
     )
 
   lazy val separateOperations: Map[Option[String], ast.Document] =
-    document.operations.map { case (name, definition) =>
-      name -> separateOperation(definition)
+    document.operations.map {
+      case (name, definition) =>
+        name -> separateOperation(definition)
     }
 
   def separateOperation(definition: OperationDefinition): ast.Document = {
