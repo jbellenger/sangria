@@ -8,7 +8,7 @@ import sangria.macros._
 import sangria.util.{FutureResultSupport, Pos}
 import sangria.validation.QueryValidator
 import InputUnmarshaller.mapVars
-import sangria.execution.deferred.{Deferred, DeferredResolver, Fetcher, HasId}
+import sangria.execution.deferred.{Deferred, DeferredResolver}
 import sangria.util.SimpleGraphQlSupport.checkContainsErrors
 
 import scala.collection.immutable.Map
@@ -46,16 +46,28 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
   case class FailColor(subj: TestSubject, color: String) extends Deferred[DeepTestSubject]
 
   class LightColorResolver extends DeferredResolver[Any] {
-    def resolve(deferred: Vector[Deferred[Any]], ctx: Any, queryState: Any)(implicit
-        ec: ExecutionContext) = deferred.map {
+    def resolve(
+      deferred: Vector[Deferred[Any]],
+      ctx: Any,
+      queryState: Any
+    )(
+      implicit
+      ec: ExecutionContext
+    ) = deferred.map {
       case LightColor(v, c) => Future.successful(v.deepColor("light" + c))
       case FailColor(v, c) => Future.failed(new IllegalStateException("error in resolver"))
     }
   }
 
   class BrokenLightColorResolver extends DeferredResolver[Any] {
-    def resolve(deferred: Vector[Deferred[Any]], ctx: Any, queryState: Any)(implicit
-        ec: ExecutionContext) = (deferred ++ deferred).map {
+    def resolve(
+      deferred: Vector[Deferred[Any]],
+      ctx: Any,
+      queryState: Any
+    )(
+      implicit
+      ec: ExecutionContext
+    ) = (deferred ++ deferred).map {
       case LightColor(v, c) => Future.successful(v.deepColor("light" + c))
       case FailColor(v, c) => Future.failed(new IllegalStateException("error in resolver"))
     }
@@ -204,6 +216,8 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
         .await should be(expected)
     }
 
+    // JMB TODO: Disabled because it uses query reducers
+    /*
     "[regression] execute queries with reducers that use variables" in {
       val doc = gql"""
         query Example($$size: Int) {
@@ -255,6 +269,7 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
         .await should be(expected)
       sizeValue should be(100)
     }
+     */
 
     "respect max depth level" in {
       val Success(doc) = QueryParser.parse("""
@@ -471,8 +486,9 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
               syncDeferError
         }""")
 
-      val exceptionHandler = ExceptionHandler { case (m, e: IllegalStateException) =>
-        HandledException(e.getMessage)
+      val exceptionHandler = ExceptionHandler {
+        case (m, e: IllegalStateException) =>
+          HandledException(e.getMessage)
       }
 
       val result = Executor
@@ -600,9 +616,16 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
       case class Sum(a: Int, b: Int) extends Deferred[Int]
 
       class MyResolver extends DeferredResolver[Any] {
-        def resolve(deferred: Vector[Deferred[Any]], ctx: Any, queryState: Any)(implicit
-            ec: ExecutionContext) = deferred.map { case Sum(a, b) =>
-          Future(a + b)(ec)
+        def resolve(
+          deferred: Vector[Deferred[Any]],
+          ctx: Any,
+          queryState: Any
+        )(
+          implicit
+          ec: ExecutionContext
+        ) = deferred.map {
+          case Sum(a, b) =>
+            Future(a + b)(ec)
         }
       }
 
@@ -641,9 +664,16 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
       case class Sum(a: Int, b: Int) extends Deferred[Int]
 
       class MyResolver extends DeferredResolver[Any] {
-        def resolve(deferred: Vector[Deferred[Any]], ctx: Any, queryState: Any)(implicit
-            ec: ExecutionContext) = deferred.map { case Sum(a, b) =>
-          Future(a + b)(ec)
+        def resolve(
+          deferred: Vector[Deferred[Any]],
+          ctx: Any,
+          queryState: Any
+        )(
+          implicit
+          ec: ExecutionContext
+        ) = deferred.map {
+          case Sum(a, b) =>
+            Future(a + b)(ec)
         }
       }
 
@@ -828,8 +858,9 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
 
       val schema = Schema(DataType)
 
-      val exceptionHandler = ExceptionHandler { case (m, e: IllegalStateException) =>
-        HandledException(e.getMessage)
+      val exceptionHandler = ExceptionHandler {
+        case (m, e: IllegalStateException) =>
+          HandledException(e.getMessage)
       }
 
       val res = Executor
@@ -858,8 +889,9 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
 
       val schema = Schema(DataType)
 
-      val exceptionHandler = ExceptionHandler { case (m, e: IllegalStateException) =>
-        HandledException(e.getMessage)
+      val exceptionHandler = ExceptionHandler {
+        case (m, e: IllegalStateException) =>
+          HandledException(e.getMessage)
       }
 
       Executor
@@ -938,8 +970,9 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
 
       val schema = Schema(QueryType)
 
-      val exceptionHandler = ExceptionHandler { case (m, e: MyListError) =>
-        HandledException(e.getMessage)
+      val exceptionHandler = ExceptionHandler {
+        case (m, e: MyListError) =>
+          HandledException(e.getMessage)
       }
 
       val result = Executor
@@ -978,6 +1011,8 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
               "locations" -> Vector(Map("line" -> 1, "column" -> 9))))))
     }
 
+    // JMB TODO: disabled because it uses middleware and query reducers
+    /*
     "support extended result in queries" in {
       import ExecutionScheme.Extended
 
@@ -1000,8 +1035,9 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
 
       val reducer = QueryReducer.measureComplexity[MyCtx]((c, ctx) => ctx.copy(complexity = c))
 
-      val exceptionHandler = ExceptionHandler { case (m, e: IllegalStateException) =>
-        HandledException(e.getMessage)
+      val exceptionHandler = ExceptionHandler {
+        case (m, e: IllegalStateException) =>
+          HandledException(e.getMessage)
       }
 
       val middleware = new Middleware[MyCtx] {
@@ -1031,6 +1067,7 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
       result.ctx.complexity should be(247)
       result.middlewareVals(0)._1 should be(345)
     }
+     */
 
     "support extended result in mutations" in {
       import ExecutionScheme.Extended
@@ -1143,6 +1180,8 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
       )
     )
 
+    // JMB TODO: disabled because it uses fetchers and leaf sequence actions
+    /*
     "support `Action.sequence` in queries and mutations" in {
       val error = new IllegalStateException("foo")
 
@@ -1178,8 +1217,9 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
 
       val schema = Schema(QueryType, Some(QueryType))
 
-      val exceptionHandler = ExceptionHandler { case (m, e: IllegalStateException) =>
-        HandledException(e.getMessage)
+      val exceptionHandler = ExceptionHandler {
+        case (m, e: IllegalStateException) =>
+          HandledException(e.getMessage)
       }
 
       val queryRes = Executor.execute(
@@ -1194,32 +1234,34 @@ class ExecutorSpec extends AnyWordSpec with Matchers with FutureResultSupport {
         exceptionHandler = exceptionHandler,
         deferredResolver = DeferredResolver.fetchers(fetcher))
 
-      Seq(queryRes.await -> 8, mutationRes.await -> 11).foreach { case (result, offset) =>
-        result should be(
-          Map(
-            "data" -> Map(
-              "ids" -> Vector(12, null, 13, 14, 15, 16, 17, 118, 119, 120, 121),
-              "foo" -> Vector(12, null, 13, 14, 15, 16, 17, 118, 119, 120, 121)),
-            "errors" -> Vector(
-              Map(
-                "message" -> "foo",
-                "path" -> Vector("ids"),
-                "locations" -> Vector(Map("line" -> 1, "column" -> offset))),
-              Map(
-                "message" -> "foo",
-                "path" -> Vector("ids"),
-                "locations" -> Vector(Map("line" -> 1, "column" -> offset))),
-              Map(
-                "message" -> "foo",
-                "path" -> Vector("foo"),
-                "locations" -> Vector(Map("line" -> 1, "column" -> (5 + offset)))),
-              Map(
-                "message" -> "foo",
-                "path" -> Vector("foo"),
-                "locations" -> Vector(Map("line" -> 1, "column" -> (5 + offset))))
-            )
-          ))
+      Seq(queryRes.await -> 8, mutationRes.await -> 11).foreach {
+        case (result, offset) =>
+          result should be(
+            Map(
+              "data" -> Map(
+                "ids" -> Vector(12, null, 13, 14, 15, 16, 17, 118, 119, 120, 121),
+                "foo" -> Vector(12, null, 13, 14, 15, 16, 17, 118, 119, 120, 121)),
+              "errors" -> Vector(
+                Map(
+                  "message" -> "foo",
+                  "path" -> Vector("ids"),
+                  "locations" -> Vector(Map("line" -> 1, "column" -> offset))),
+                Map(
+                  "message" -> "foo",
+                  "path" -> Vector("ids"),
+                  "locations" -> Vector(Map("line" -> 1, "column" -> offset))),
+                Map(
+                  "message" -> "foo",
+                  "path" -> Vector("foo"),
+                  "locations" -> Vector(Map("line" -> 1, "column" -> (5 + offset)))),
+                Map(
+                  "message" -> "foo",
+                  "path" -> Vector("foo"),
+                  "locations" -> Vector(Map("line" -> 1, "column" -> (5 + offset))))
+              )
+            ))
       }
     }
+     */
   }
 }

@@ -6,11 +6,11 @@ import sangria.execution.deferred.{Deferred, DeferredResolver}
 import sangria.marshalling.{ResultMarshaller, ScalarValueInfo}
 import sangria.parser.SourceMapper
 import sangria.schema._
-
 import scala.collection.immutable.VectorBuilder
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
+import sun.reflect.generics.reflectiveObjects.NotImplementedException
 
 class Resolver[Ctx](
   val marshaller: ResultMarshaller,
@@ -510,6 +510,9 @@ class Resolver[Ctx](
                       None)
                 }
             )
+
+          case (_, Some((_, _, _))) => throw RemovedForSimplification
+
         }
 
         val simpleRes = resolvedValues.collect { case (af, r: Result) => af -> r }

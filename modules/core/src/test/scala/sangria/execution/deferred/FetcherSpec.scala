@@ -13,6 +13,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
+/*
 class FetcherSpec extends AnyWordSpec with Matchers with FutureResultSupport {
   case class Product(id: Int, name: String, inCategories: Vector[String])
   case class Category(
@@ -1019,3 +1020,4 @@ class FetcherSpec extends AnyWordSpec with Matchers with FutureResultSupport {
     }
   }
 }
+ */

@@ -13,24 +13,27 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 case class Executor[Ctx, Root](
-    schema: Schema[Ctx, Root],
-    queryValidator: QueryValidator = QueryValidator.default,
-    deferredResolver: DeferredResolver[Ctx] = DeferredResolver.empty,
-    exceptionHandler: ExceptionHandler = ExceptionHandler.empty,
-    deprecationTracker: DeprecationTracker = DeprecationTracker.empty,
-    maxQueryDepth: Option[Int] = None
-)(implicit executionContext: ExecutionContext) {
+  schema: Schema[Ctx, Root],
+  queryValidator: QueryValidator = QueryValidator.default,
+  deferredResolver: DeferredResolver[Ctx] = DeferredResolver.empty,
+  exceptionHandler: ExceptionHandler = ExceptionHandler.empty,
+  deprecationTracker: DeprecationTracker = DeprecationTracker.empty,
+  maxQueryDepth: Option[Int] = None
+)(
+  implicit executionContext: ExecutionContext) {
 
   def execute[Input](
-      queryAst: ast.Document,
-      userContext: Ctx,
-      root: Root,
-      operationName: Option[String] = None,
-      variables: Input = emptyMapVars
-  )(implicit
-      marshaller: ResultMarshaller,
-      um: InputUnmarshaller[Input],
-      scheme: ExecutionScheme): scheme.Result[Ctx, marshaller.Node] = {
+    queryAst: ast.Document,
+    userContext: Ctx,
+    root: Root,
+    operationName: Option[String] = None,
+    variables: Input = emptyMapVars
+  )(
+    implicit
+    marshaller: ResultMarshaller,
+    um: InputUnmarshaller[Input],
+    scheme: ExecutionScheme
+  ): scheme.Result[Ctx, marshaller.Node] = {
     val violations = queryValidator.validateQuery(schema, queryAst)
 
     if (violations.nonEmpty)
@@ -49,9 +52,8 @@ case class Executor[Ctx, Root](
 
       val executionResult = for {
         operation <- Executor.getOperation(exceptionHandler, queryAst, operationName)
-        unmarshalledVariables <- valueCollector.getVariableValues(
-          operation.variables,
-          scalarMiddleware)
+        unmarshalledVariables <-
+          valueCollector.getVariableValues(operation.variables, scalarMiddleware)
         fieldCollector = new FieldCollector[Ctx, Root](
           schema,
           queryAst,
@@ -59,11 +61,8 @@ case class Executor[Ctx, Root](
           queryAst.sourceMapper,
           valueCollector,
           exceptionHandler)
-        tpe <- Executor.getOperationRootType(
-          schema,
-          exceptionHandler,
-          operation,
-          queryAst.sourceMapper)
+        tpe <-
+          Executor.getOperationRootType(schema, exceptionHandler, operation, queryAst.sourceMapper)
         fields <- fieldCollector.collectFields(ExecutionPath.empty, tpe, Vector(operation))
       } yield {
         val reduced = Future(userContext)
@@ -96,21 +95,21 @@ case class Executor[Ctx, Root](
   }
 
   private def executeOperation[Input](
-      queryAst: ast.Document,
-      operationName: Option[String],
-      inputVariables: Input,
-      inputUnmarshaller: InputUnmarshaller[Input],
-      operation: ast.OperationDefinition,
-      sourceMapper: Option[SourceMapper],
-      valueCollector: ValueCollector[Ctx, _],
-      fieldCollector: FieldCollector[Ctx, Root],
-      marshaller: ResultMarshaller,
-      variables: Map[String, VariableValue],
-      tpe: ObjectType[Ctx, Root],
-      fields: CollectedFields,
-      ctx: Ctx,
-      root: Root,
-      scheme: ExecutionScheme
+    queryAst: ast.Document,
+    operationName: Option[String],
+    inputVariables: Input,
+    inputUnmarshaller: InputUnmarshaller[Input],
+    operation: ast.OperationDefinition,
+    sourceMapper: Option[SourceMapper],
+    valueCollector: ValueCollector[Ctx, _],
+    fieldCollector: FieldCollector[Ctx, Root],
+    marshaller: ResultMarshaller,
+    variables: Map[String, VariableValue],
+    tpe: ObjectType[Ctx, Root],
+    fields: CollectedFields,
+    ctx: Ctx,
+    root: Root,
+    scheme: ExecutionScheme
   ): scheme.Result[Ctx, marshaller.Node] =
     try {
       val deferredResolverState = deferredResolver.initialQueryState
@@ -140,8 +139,9 @@ case class Executor[Ctx, Root](
           resolver
             .resolveFieldsSeq(tpe, root, fields)(scheme)
             .asInstanceOf[scheme.Result[Ctx, marshaller.Node]]
-      }
 
+        case _ => throw RemovedForSimplification
+      }
     } catch {
       case NonFatal(error) =>
         scheme.failed(error)
@@ -152,22 +152,24 @@ object Executor {
   type ExceptionHandler = sangria.execution.ExceptionHandler
 
   def execute[Ctx, Root, Input](
-      schema: Schema[Ctx, Root],
-      queryAst: ast.Document,
-      userContext: Ctx = (),
-      root: Root = (),
-      operationName: Option[String] = None,
-      variables: Input = emptyMapVars,
-      queryValidator: QueryValidator = QueryValidator.default,
-      deferredResolver: DeferredResolver[Ctx] = DeferredResolver.empty,
-      exceptionHandler: ExceptionHandler = ExceptionHandler.empty,
-      deprecationTracker: DeprecationTracker = DeprecationTracker.empty,
-      maxQueryDepth: Option[Int] = None
-  )(implicit
-      executionContext: ExecutionContext,
-      marshaller: ResultMarshaller,
-      um: InputUnmarshaller[Input],
-      scheme: ExecutionScheme): scheme.Result[Ctx, marshaller.Node] =
+    schema: Schema[Ctx, Root],
+    queryAst: ast.Document,
+    userContext: Ctx = (),
+    root: Root = (),
+    operationName: Option[String] = None,
+    variables: Input = emptyMapVars,
+    queryValidator: QueryValidator = QueryValidator.default,
+    deferredResolver: DeferredResolver[Ctx] = DeferredResolver.empty,
+    exceptionHandler: ExceptionHandler = ExceptionHandler.empty,
+    deprecationTracker: DeprecationTracker = DeprecationTracker.empty,
+    maxQueryDepth: Option[Int] = None
+  )(
+    implicit
+    executionContext: ExecutionContext,
+    marshaller: ResultMarshaller,
+    um: InputUnmarshaller[Input],
+    scheme: ExecutionScheme
+  ): scheme.Result[Ctx, marshaller.Node] =
     Executor(
       schema,
       queryValidator,
@@ -175,15 +177,15 @@ object Executor {
       exceptionHandler,
       deprecationTracker,
       maxQueryDepth
-    )
-      .execute(queryAst, userContext, root, operationName, variables)
+    ).execute(queryAst, userContext, root, operationName, variables)
       .asInstanceOf[scheme.Result[Ctx, marshaller.Node]]
 
   def getOperationRootType[Ctx, Root](
-      schema: Schema[Ctx, Root],
-      exceptionHandler: ExceptionHandler,
-      operation: ast.OperationDefinition,
-      sourceMapper: Option[SourceMapper]) = operation.operationType match {
+    schema: Schema[Ctx, Root],
+    exceptionHandler: ExceptionHandler,
+    operation: ast.OperationDefinition,
+    sourceMapper: Option[SourceMapper]
+  ) = operation.operationType match {
     case ast.OperationType.Query =>
       Success(schema.query)
     case ast.OperationType.Mutation =>
@@ -209,9 +211,10 @@ object Executor {
   }
 
   def getOperation(
-      exceptionHandler: ExceptionHandler,
-      document: ast.Document,
-      operationName: Option[String]): Try[ast.OperationDefinition] =
+    exceptionHandler: ExceptionHandler,
+    document: ast.Document,
+    operationName: Option[String]
+  ): Try[ast.OperationDefinition] =
     if (document.operations.size != 1 && operationName.isEmpty)
       Failure(
         OperationSelectionError(

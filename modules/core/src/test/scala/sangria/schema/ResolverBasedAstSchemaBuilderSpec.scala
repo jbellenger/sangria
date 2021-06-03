@@ -105,8 +105,9 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
         DirectiveScalarResolver(CoolDir, _ => StringType),
         DirectiveResolver(TestDir, resolve = _.arg(ValueArg)),
         DynamicDirectiveResolver[Any, JsValue]("json", resolve = _.args),
-        FieldResolver { case (TypeName("Query"), FieldName("id")) =>
-          _ => UUID.fromString("a26bdfd4-0fcf-484f-b363-585091b3319f")
+        FieldResolver {
+          case (TypeName("Query"), FieldName("id")) =>
+            _ => UUID.fromString("a26bdfd4-0fcf-484f-b363-585091b3319f")
         },
         LegacyCommentDescriptionsResolver(),
         AnyFieldResolver.defaultInput[Any, JsValue]
@@ -161,7 +162,8 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
           }
         """
 
-      Executor.execute(schema, query).await should be("""
+      Executor.execute(schema, query).await should be(
+        """
         {
           "data": {
             "id": "a26bdfd4-0fcf-484f-b363-585091b3319f",
@@ -271,6 +273,8 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
         """.parseJson)
     }
 
+    // JMB TODO: Disabled because it uses query reducers
+    /*
     "resolve fields based on the directives" in {
       val ValueArg = Argument("value", StringType)
 
@@ -331,6 +335,7 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
 
       complexity.get should be(200)
     }
+     */
 
     "resolve enum values" in {
       val builder = resolverBased[Any](
@@ -339,10 +344,11 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
           case (TypeName("Color"), v) if v.name == "GREEN" => "#00FF00"
           case (TypeName("Color"), v) if v.name == "BLUE" => "#0000FF"
         },
-        FieldResolver { case (TypeName("Mutation"), FieldName("eat")) =>
-          ctx =>
-            "tasty " + ctx.arg[String]("color") + " " + ctx.arg[InputObjectType.DefaultInput](
-              "fruit")("color")
+        FieldResolver {
+          case (TypeName("Mutation"), FieldName("eat")) =>
+            ctx =>
+              "tasty " + ctx.arg[String]("color") + " " + ctx.arg[InputObjectType.DefaultInput](
+                "fruit")("color")
         }
       )
 
@@ -402,6 +408,8 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
         Map("data" -> Map("eat" -> "tasty #0000FF #FF0000", "more" -> "tasty #FF0000 #00FF00")))
     }
 
+    // JMB TODO: disabled because it uses query reducers
+    /*
     "resolve fields based on the dynamic directives" in {
       import sangria.marshalling.sprayJson._
 
@@ -453,7 +461,8 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
       val complexity = new AtomicInteger(0)
       val reducer = QueryReducer.measureComplexity[Any]((c, _) => complexity.set(c.toInt))
 
-      Executor.execute(schema, query, queryReducers = reducer :: Nil).await should be("""
+      Executor.execute(schema, query, queryReducers = reducer :: Nil).await should be(
+        """
           {
             "data": {
               "myStr": "first-last",
@@ -464,6 +473,7 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
 
       complexity.get should be(200)
     }
+     */
 
     "resolve fields based on names" in {
       val builder = resolverBased[Unit](
@@ -868,7 +878,8 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
           }
         """
 
-      Executor.execute(schema, query1, variables = vars, root = data).await should be("""
+      Executor.execute(schema, query1, variables = vars, root = data).await should be(
+        """
           {
             "data": {
               "article": null
@@ -888,7 +899,8 @@ class ResolverBasedAstSchemaBuilderSpec extends AnyWordSpec with Matchers with F
           }
         """
 
-      Executor.execute(schema, query2, variables = vars, root = data).await should be("""
+      Executor.execute(schema, query2, variables = vars, root = data).await should be(
+        """
           {
             "data": {
               "article": [{
