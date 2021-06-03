@@ -417,80 +417,6 @@ class Resolver[Ctx](
     }
 
   /**
-   * Resolve individual actions contained in a [[SequenceLeafAction]]
-   *
-   * You may wonder:
-   *   - What is a SequenceLeafAction anyways?
-   *   - How is a SequenceLeafAction different from a Value of a Seq?
-   *
-   * Great question! A SequenceLeafAction allows mixing action types at a **field value** level.
-   * This can be used if a field wants to return a Seq that mixes futures, trys, defers,
-   * partial values, and more.
-   *
-   * There is a good example of this in this test:
-   * https://github.com/sangria-graphql/sangria/blob/v2.1.3/modules/core/src/test/scala/sangria/execution/ExecutorSpec.scala#L1251
-   */
-  private def resolveActionSequenceValues(
-    fieldsPath: ExecutionPath,
-    astFields: Vector[ast.Field],
-    field: Field[Ctx, _],
-    actions: Seq[LeafAction[Any, Any]]
-  ): Seq[SeqRes] =
-    actions.map {
-      case Value(v) => SeqRes(SeqFutRes(v))
-      case TryValue(Success(v)) => SeqRes(SeqFutRes(v))
-      case TryValue(Failure(e)) => SeqRes(SeqFutRes(errors = Vector(e)))
-      case PartialValue(v, es) => SeqRes(SeqFutRes(v, es))
-      case FutureValue(future) =>
-        SeqRes(future.map(v => SeqFutRes(v)).recover { case e => SeqFutRes(errors = Vector(e)) })
-      case PartialFutureValue(future) =>
-        SeqRes(future.map { case PartialValue(v, es) => SeqFutRes(v, es) }.recover {
-          case e =>
-            SeqFutRes(errors = Vector(e))
-        })
-      case DeferredValue(deferred) =>
-        val promise = Promise[(ChildDeferredContext, Any, Vector[Throwable])]()
-        val (args, complexity) = calcComplexity(fieldsPath, astFields.head, field, userContext)
-        val defer = Defer(promise, deferred, complexity, field, astFields, args)
-
-        SeqRes(
-          promise.future.map { case (dctx, v, es) => SeqFutRes(v, es, dctx) }.recover {
-            case e =>
-              SeqFutRes(errors = Vector(e))
-          },
-          defer)
-      case DeferredFutureValue(deferredValue) =>
-        val promise = Promise[(ChildDeferredContext, Any, Vector[Throwable])]()
-
-        def defer(d: Deferred[Any]) = {
-          val (args, complexity) = calcComplexity(fieldsPath, astFields.head, field, userContext)
-          Defer(promise, d, complexity, field, astFields, args)
-        }
-
-        val actualDeferred = deferredValue
-          .map(d => Vector(defer(d)))
-          .recover {
-            case NonFatal(e) =>
-              promise.failure(e)
-              Vector.empty
-          }
-
-        SeqRes(
-          promise.future.map { case (dctx, v, es) => SeqFutRes(v, es, dctx) }.recover {
-            case e =>
-              SeqFutRes(errors = Vector(e))
-          },
-          actualDeferred)
-      case SequenceLeafAction(_) | _: MappedSequenceLeafAction[_, _, _] =>
-        SeqRes(SeqFutRes(errors = Vector(new IllegalStateException(
-          "Nested `SequenceLeafAction` is not yet supported inside of another `SequenceLeafAction`"))))
-      case SubscriptionValue(_, _) =>
-        SeqRes(
-          SeqFutRes(errors = Vector(new IllegalStateException(
-            "Subscription values are not supported for normal operations"))))
-    }
-
-  /**
    * Resolve an ordered set of fields on an object, returning a [[Resolve]] that captures either
    * a synchronous ([[Result]]) or asynchronous ([[DeferredResult]] resolution of these fields.
    *
@@ -548,62 +474,6 @@ class Resolver[Ctx](
                   None)
             }
 
-          case (astFields, Some((field, updateCtx, SequenceLeafAction(actions)))) =>
-            val fieldsPath = path.add(astFields.head, tpe)
-            val values = resolveActionSequenceValues(fieldsPath, astFields, field, actions)
-            val future = Future.sequence(values.map(_.value))
-
-            val resolved = future
-              .flatMap { vs =>
-                val errors = vs.flatMap(_.errors).toVector
-                val successfulValues = vs.collect { case SeqFutRes(v, _, _) if v != null => v }
-                val dctx = vs.collect { case SeqFutRes(_, _, d) if d != null => d }
-
-                def resolveDctx(resolve: Resolve) = {
-                  val last = dctx.lastOption
-                  val init = if (dctx.isEmpty) dctx else dctx.init
-
-                  resolve match {
-                    case res: Result =>
-                      dctx.foreach(_.promise.success(Vector.empty))
-                      Future.successful(res)
-                    case res: DeferredResult =>
-                      init.foreach(_.promise.success(Vector.empty))
-                      last.foreach(_.promise.success(res.deferred))
-                      res.futureValue
-                  }
-                }
-
-                errors.foreach(resolveError(updateCtx, _))
-
-                if (successfulValues.size == vs.size)
-                  resolveDctx(
-                    resolveValue(
-                      fieldsPath,
-                      astFields,
-                      field.fieldType,
-                      field,
-                      resolveVal(updateCtx, successfulValues),
-                      resolveUc(updateCtx, successfulValues))
-                      .appendErrors(fieldsPath, errors, astFields.head.location))
-                else
-                  resolveDctx(
-                    Result(
-                      ErrorRegistry.empty.append(fieldsPath, errors, astFields.head.location),
-                      None))
-              }
-              .recover {
-                case e =>
-                  Result(
-                    ErrorRegistry(fieldsPath, resolveError(updateCtx, e), astFields.head.location),
-                    None)
-              }
-
-            val deferred = values.collect { case SeqRes(_, d, _) if d != null => d }.toVector
-            val deferredFut = values.collect { case SeqRes(_, _, d) if d != null => d }.toVector
-
-            astFields.head -> DeferredResult(Future.successful(deferred) +: deferredFut, resolved)
-
           case (astFields, Some((field, updateCtx, DeferredValue(deferred)))) =>
             val fieldsPath = path.add(astFields.head, tpe)
             val promise = Promise[(ChildDeferredContext, Any, Vector[Throwable])]()
@@ -640,15 +510,6 @@ class Resolver[Ctx](
                       None)
                 }
             )
-
-          case (astFields, Some((_, updateCtx, _: MappedSequenceLeafAction[_, _, _]))) =>
-            val fieldsPath = path.add(astFields.head, tpe)
-            val error =
-              new IllegalStateException("MappedSequenceLeafAction is not supposed to appear here")
-
-            astFields.head -> Result(
-              ErrorRegistry(fieldsPath, resolveError(updateCtx, error), astFields.head.location),
-              None)
         }
 
         val simpleRes = resolvedValues.collect { case (af, r: Result) => af -> r }
@@ -1279,27 +1140,6 @@ class Resolver[Ctx](
     action: LeafAction[Ctx, Any],
     ctxUpdate: Option[MappedCtxUpdate[Ctx, Any, Any]])
       extends FieldResolution
-
-  /**
-   * A SeqRes describes the result of resolving a single item in the sequence of a
-   * SequenceLeafAction.
-   *
-   * SeqRes objects are created exclusively in the [[resolveActionSequenceValues]] method.
-   */
-  private case class SeqRes(value: Future[SeqFutRes], defer: Defer, deferFut: Future[Vector[Defer]])
-
-  private object SeqRes {
-    def apply(value: SeqFutRes): SeqRes = SeqRes(Future.successful(value), null, null)
-    def apply(value: Future[SeqFutRes]): SeqRes = SeqRes(value, null, null)
-    def apply(value: Future[SeqFutRes], defer: Defer): SeqRes = SeqRes(value, defer, null)
-    def apply(value: Future[SeqFutRes], deferFut: Future[Vector[Defer]]): SeqRes =
-      SeqRes(value, null, deferFut)
-  }
-
-  private case class SeqFutRes(
-    value: Any = null,
-    errors: Vector[Throwable] = Vector.empty,
-    dctx: ChildDeferredContext = null)
 }
 
 object Resolver {
