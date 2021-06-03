@@ -60,6 +60,8 @@ lazy val core = project
     description := "Scala GraphQL implementation",
     mimaPreviousArtifacts := Set("org.sangria-graphql" %% "sangria" % "2.1.0"),
     Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oF"),
+    assembly / test := {},
+    assembly / assemblyJarName := "sangria_2.12.jar",
     libraryDependencies ++= Seq(
       // AST Parser
       "org.parboiled" %% "parboiled" % "2.3.0",
@@ -91,6 +93,7 @@ lazy val benchmarks = project
   .settings(scalacSettings ++ shellSettings ++ noPublishSettings)
   .settings(
     name := "sangria-benchmarks",
+    assembly / test := {},
     description := "Benchmarks of Sangria functionality"
   )
   .disablePlugins(MimaPlugin)
