@@ -143,7 +143,16 @@ class Resolver[Ctx](
     res
   }
 
-  // JMB NOTE: This doesn't actually resolve Deferred's, it just groups them
+  /**
+   * Group a collection of [[Defer]]s. This is a hook that allows a [[DeferredResolver]] to create
+   * groupings of Defers that will be batched together. An example of this is to group Defers by
+   * complexity in order to execute-and-stream-back cheap defers before starting on more expensive
+   * ones.
+   * See https://sangria-graphql.github.io/learn/#customizing-deferredresolver-behaviour
+   *
+   * Note that this method name implies that it resolves the Defers when it doesn't.
+   * It only groups them
+   */
   private def resolveDeferredWithGrouping(
     deferred: Vector[Future[Vector[Defer]]]
   ): Future[Vector[Vector[Defer]]] =
@@ -343,6 +352,16 @@ class Resolver[Ctx](
     }
   }
 
+  /**
+   * Calculate complexity of a field.
+   *
+   * You may be wondering: isn't this already done by the [[MeasureComplexity]] query reducer?
+   *
+   * It is! But where MeasureComplexity calculates a total complexity for a complete query document,
+   * This function recalculates that complexity for an individual field level.
+   * This complexity score will be included in a [[DeferredWithInfo]] so that a [[DeferredResolver]]
+   * may have the option of executing cheap fields before more expensive ones.
+   */
   private def calcComplexity(
     path: ExecutionPath,
     astField: ast.Field,
@@ -397,6 +416,20 @@ class Resolver[Ctx](
         }
     }
 
+  /**
+   * Resolve individual actions contained in a [[SequenceLeafAction]]
+   *
+   * You may wonder:
+   *   - What is a SequenceLeafAction anyways?
+   *   - How is a SequenceLeafAction different from a Value of a Seq?
+   *
+   * Great question! A SequenceLeafAction allows mixing action types at a **field value** level.
+   * This can be used if a field wants to return a Seq that mixes futures, trys, defers,
+   * partial values, and more.
+   *
+   * There is a good example of this in this test:
+   * https://github.com/sangria-graphql/sangria/blob/v2.1.3/modules/core/src/test/scala/sangria/execution/ExecutorSpec.scala#L1251
+   */
   private def resolveActionSequenceValues(
     fieldsPath: ExecutionPath,
     astFields: Vector[ast.Field],
@@ -1247,6 +1280,12 @@ class Resolver[Ctx](
     ctxUpdate: Option[MappedCtxUpdate[Ctx, Any, Any]])
       extends FieldResolution
 
+  /**
+   * A SeqRes describes the result of resolving a single item in the sequence of a
+   * SequenceLeafAction.
+   *
+   * SeqRes objects are created exclusively in the [[resolveActionSequenceValues]] method.
+   */
   private case class SeqRes(value: Future[SeqFutRes], defer: Defer, deferFut: Future[Vector[Defer]])
 
   private object SeqRes {
@@ -1309,7 +1348,13 @@ object Resolver {
 
   /**
    * A utility class for describing how the value and/or context should be modified
-   * after resolving a Field's subtree
+   * after resolving a Field's subtree.
+   *
+   * This should not be confused with the similarly named [[MappedUpdateCtx]], which is a resolver
+   * Action that has actual values for next context and next value.
+   *
+   * This class does not contain actual context or values, just functions that can transform these
+   * things for a fields subtree
    */
   private case class MappedCtxUpdate[Ctx, Val, NewVal](
     ctxFn: Val => Ctx,
