@@ -4,7 +4,6 @@ import org.openjdk.jmh.annotations._
 import org.openjdk.jmh.infra.Blackhole
 import sangria.ast.Document
 import sangria.execution.Executor
-import sangria.execution.experimental.Executor2
 import sangria.parser.QueryParser
 import sangria.schema._
 import sangria.validation.QueryValidator
@@ -17,9 +16,6 @@ import scala.concurrent.duration.Duration
 @State(Scope.Thread)
 class ExecutorBenchmark {
   import ExecutorBenchmark._
-
-  @Param(Array("Default", "Experimental"))
-  var executorType: String = _
 
   @Param(Array("150"))
   var depth: Int = _
@@ -35,21 +31,12 @@ class ExecutorBenchmark {
     query = mkQuery(breadth, depth)
     val schema = mkSchema(breadth)
 
-    executorType match {
-      case "Default" =>
-        executor = Executor.Default(
-          schema,
-          // This benchmark focuses on performance of the underlying Resolver.
-          // Let's disable query validation for maximum speed.
-          queryValidator = QueryValidator.empty
-        )(scala.concurrent.ExecutionContext.global)
-
-      case "Experimental" =>
-        executor = Executor2(
-          schema,
-          queryValidator = QueryValidator.empty
-        )(scala.concurrent.ExecutionContext.global)
-    }
+    executor = Executor.Default(
+      schema,
+      // This benchmark focuses on performance of the underlying Resolver.
+      // Let's disable query validation for maximum speed.
+      queryValidator = QueryValidator.empty
+    )(scala.concurrent.ExecutionContext.global)
   }
 
   @Benchmark
