@@ -813,7 +813,7 @@ class Resolver[Ctx](
     // this is very hot place, so resorting to mutability to minimize the footprint
 
     var errorReg = ErrorRegistry.empty
-    val listBuilder = new VectorBuilder[marshaller.Node]
+    var nodes = List.empty[marshaller.Node]
     var canceled = false
     val resIt = simpleRes.iterator
 
@@ -827,15 +827,15 @@ class Resolver[Ctx](
 
       res.nodeValue match {
         case node if optional =>
-          listBuilder += marshaller.optionalArrayNodeValue(node)
+          nodes = marshaller.optionalArrayNodeValue(node) :: nodes
         case Some(other) =>
-          listBuilder += other
+          nodes = other :: nodes
         case None =>
           canceled = true
       }
     }
 
-    Result(errorReg, if (canceled) None else Some(marshaller.arrayNode(listBuilder.result())))
+    Result(errorReg, if (canceled) None else Some(marshaller.arrayNode(nodes.reverse)))
   }
 
   private def resolveField(

@@ -1,11 +1,10 @@
 package sangria.execution
 
+import sangria.ast
 import sangria.ast.OperationType
 import sangria.parser.SourceMapper
 import sangria.schema._
-import sangria.ast
 import sangria.util.Cache
-
 import scala.collection.mutable.{ArrayBuffer, Map => MutableMap, Set => MutableSet}
 import scala.util.{Failure, Success, Try}
 
@@ -220,7 +219,7 @@ class FieldCollector[Ctx, Val](
     }
 }
 
-case class CollectedFields(namesOrdered: Array[String], fields: Array[CollectedField])
+case class CollectedFields(namesOrdered: Array[String], fields: Iterable[CollectedField])
 case class CollectedField(name: String, field: ast.Field, allFields: Try[Array[ast.Field]])
 
 // Mutable builder to minimize intermediate object creation
@@ -273,6 +272,6 @@ class CollectedFieldsBuilder {
         CollectedField(names(idx), f, fields(idx).map(_.toArray))
     }
 
-    CollectedFields(names.toArray, builtFields.toArray)
+    CollectedFields(names.toArray, builtFields.result)
   }
 }

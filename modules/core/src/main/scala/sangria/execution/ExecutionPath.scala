@@ -8,6 +8,7 @@ case class ExecutionPath private (
   path: List[Any],
   cacheKeyPath: ExecutionPath.PathCacheKey,
   private val cacheKeyPathSize: Int) {
+
   def add(field: ast.Field, parentType: ObjectType[_, _]): ExecutionPath =
     copy(
       field.outputName :: path,
@@ -27,8 +28,7 @@ case class ExecutionPath private (
    */
   def size = cacheKeyPathSize / 2
 
-  // JMB TODO: change marshalling arrayNode to accept any old Seq
-  def marshal(m: ResultMarshaller): m.Node = m.arrayNode(path.toVector.reverse.map {
+  def marshal(m: ResultMarshaller): m.Node = m.arrayNode(path.reverse.map {
     case s: String => m.scalarNode(s, "String", Set.empty)
     case i: Int => m.scalarNode(i, "Int", Set.empty)
   })

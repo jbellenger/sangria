@@ -12,17 +12,19 @@ import sangria.validation._
 import scala.collection.immutable.VectorBuilder
 
 class ValueCoercionHelper[Ctx](
-    sourceMapper: Option[SourceMapper] = None,
-    deprecationTracker: DeprecationTracker = DeprecationTracker.empty,
-    userContext: Option[Ctx] = None) {
+  sourceMapper: Option[SourceMapper] = None,
+  deprecationTracker: DeprecationTracker = DeprecationTracker.empty,
+  userContext: Option[Ctx] = None) {
   import ValueCoercionHelper.defaultValueMapFn
 
   private def resolveListValue(
-      ofType: InputType[_],
-      fieldPath: List[String],
-      marshaller: ResultMarshaller,
-      pos: List[AstLocation])(
-      value: Either[Vector[Violation], Trinary[Any]]): Either[Vector[Violation], marshaller.Node] =
+    ofType: InputType[_],
+    fieldPath: List[String],
+    marshaller: ResultMarshaller,
+    pos: List[AstLocation]
+  )(
+    value: Either[Vector[Violation], Trinary[Any]]
+  ): Either[Vector[Violation], marshaller.Node] =
     value match {
       case Right(v) if ofType.isOptional =>
         Right(marshaller.optionalArrayNodeValue(v.asInstanceOf[Trinary[marshaller.Node]].toOption))
@@ -39,24 +41,24 @@ class ValueCoercionHelper[Ctx](
     }
 
   def resolveMapValue(
-      ofType: InputType[_],
-      fieldPath: List[String],
-      default: Option[(_, ToInput[_, _])],
-      inputFor: Option[ast.AstNode],
-      fieldName: String,
-      marshaller: ResultMarshaller,
-      firstKindMarshaller: ResultMarshaller,
-      errors: VectorBuilder[Violation],
-      pos: List[AstLocation] = Nil,
-      isArgument: Boolean,
-      fromScalarMiddleware: Option[(Any, InputType[_]) => Option[Either[Violation, Any]]],
-      allowErrorsOnDefault: Boolean = false,
-      valueMap: Nothing => Any = defaultValueMapFn,
-      defaultValueInfo: Option[Cache[String, Any]] = None,
-      undefinedValues: Option[VectorBuilder[String]] = None
+    ofType: InputType[_],
+    fieldPath: List[String],
+    default: Option[(_, ToInput[_, _])],
+    inputFor: Option[ast.AstNode],
+    fieldName: String,
+    marshaller: ResultMarshaller,
+    firstKindMarshaller: ResultMarshaller,
+    errors: VectorBuilder[Violation],
+    pos: List[AstLocation] = Nil,
+    isArgument: Boolean,
+    fromScalarMiddleware: Option[(Any, InputType[_]) => Option[Either[Violation, Any]]],
+    allowErrorsOnDefault: Boolean = false,
+    valueMap: Nothing => Any = defaultValueMapFn,
+    defaultValueInfo: Option[Cache[String, Any]] = None,
+    undefinedValues: Option[VectorBuilder[String]] = None
   )(
-      acc: marshaller.MapBuilder,
-      value: Option[Either[Vector[Violation], Trinary[marshaller.Node]]]
+    acc: marshaller.MapBuilder,
+    value: Option[Either[Vector[Violation], Trinary[marshaller.Node]]]
   ): marshaller.MapBuilder = {
     val valueMapTyped = valueMap.asInstanceOf[Any => marshaller.Node]
 
@@ -169,18 +171,20 @@ class ValueCoercionHelper[Ctx](
   }
 
   def coerceInputValue[In](
-      tpe: InputType[_],
-      fieldPath: List[String],
-      input: In,
-      inputFor: Option[ast.AstNode],
-      variables: Option[Map[String, VariableValue]],
-      marshaller: ResultMarshaller,
-      firstKindMarshaller: ResultMarshaller,
-      isArgument: Boolean,
-      errorPrefix: => String = "",
-      nullWithDefault: Boolean = false,
-      fromScalarMiddleware: Option[(Any, InputType[_]) => Option[Either[Violation, Any]]] = None
-  )(implicit iu: InputUnmarshaller[In]): Either[Vector[Violation], Trinary[marshaller.Node]] = {
+    tpe: InputType[_],
+    fieldPath: List[String],
+    input: In,
+    inputFor: Option[ast.AstNode],
+    variables: Option[Map[String, VariableValue]],
+    marshaller: ResultMarshaller,
+    firstKindMarshaller: ResultMarshaller,
+    isArgument: Boolean,
+    errorPrefix: => String = "",
+    nullWithDefault: Boolean = false,
+    fromScalarMiddleware: Option[(Any, InputType[_]) => Option[Either[Violation, Any]]] = None
+  )(
+    implicit iu: InputUnmarshaller[In]
+  ): Either[Vector[Violation], Trinary[marshaller.Node]] = {
     def defined(node: marshaller.Node): Trinary[marshaller.Node] =
       if (nullWithDefault) Trinary.NullWithDefault(node)
       else Trinary.Defined(node)
@@ -214,10 +218,11 @@ class ValueCoercionHelper[Ctx](
           )))
 
     def resolveSuccessfulCoercedScalar(
-        v: Any,
-        outFn: Any => Any,
-        scalar: ScalarType[Any],
-        value: In) = {
+      v: Any,
+      outFn: Any => Any,
+      scalar: ScalarType[Any],
+      value: In
+    ) = {
       val prepared = firstKindMarshaller match {
         case raw: RawResultMarshaller => raw.rawScalarNode(v)
         case standard =>
@@ -232,11 +237,12 @@ class ValueCoercionHelper[Ctx](
     }
 
     def resolveCoercedScalar(
-        coerced: Either[Violation, Any],
-        outFn: Any => Any,
-        scalar: ScalarType[Any],
-        actualType: InputType[_],
-        value: In) =
+      coerced: Either[Violation, Any],
+      outFn: Any => Any,
+      scalar: ScalarType[Any],
+      actualType: InputType[_],
+      value: In
+    ) =
       coerced.fold(
         violation =>
           Left(
@@ -356,7 +362,7 @@ class ValueCoercionHelper[Ctx](
               fromScalarMiddleware))
 
         res match {
-          case Right(v) => Right(defined(marshaller.arrayNode(Vector(v))))
+          case Right(v) => Right(defined(marshaller.arrayNode(Seq(v))))
           case Left(violations) => Left(violations)
         }
 
@@ -525,16 +531,18 @@ class ValueCoercionHelper[Ctx](
                   valuePosition(inputFor, value),
                   errorPrefix,
                   isArgument))),
-          { case (v, deprecated) =>
-            if (deprecated && userContext.isDefined)
-              deprecationTracker.deprecatedEnumValueUsed(enum, v, userContext.get)
+          {
+            case (v, deprecated) =>
+              if (deprecated && userContext.isDefined)
+                deprecationTracker.deprecatedEnumValueUsed(enum, v, userContext.get)
 
-            val prepared = firstKindMarshaller match {
-              case raw: RawResultMarshaller => raw.rawScalarNode(v)
-              case standard => Resolver.marshalEnumValue(enum.coerceOutput(v), standard, enum.name)
-            }
+              val prepared = firstKindMarshaller match {
+                case raw: RawResultMarshaller => raw.rawScalarNode(v)
+                case standard =>
+                  Resolver.marshalEnumValue(enum.coerceOutput(v), standard, enum.name)
+              }
 
-            Right(defined(prepared.asInstanceOf[marshaller.Node]))
+              Right(defined(prepared.asInstanceOf[marshaller.Node]))
           }
         )
 
@@ -580,8 +588,13 @@ class ValueCoercionHelper[Ctx](
     values.headOption.fold(nodeLocations)(nodeLocations ++ _)
   }
 
-  def isValidValue[In](tpe: InputType[_], input: Option[In])(implicit
-      um: InputUnmarshaller[In]): Vector[Violation] = (tpe, input) match {
+  def isValidValue[In](
+    tpe: InputType[_],
+    input: Option[In]
+  )(
+    implicit
+    um: InputUnmarshaller[In]
+  ): Vector[Violation] = (tpe, input) match {
     case (OptionInputType(ofType), Some(value)) if um.isDefined(value) =>
       isValidValue(ofType, Some(value))
     case (OptionInputType(_), _) => Vector.empty
@@ -675,11 +688,14 @@ class ValueCoercionHelper[Ctx](
   }
 
   def getVariableValue[In](
-      definition: ast.VariableDefinition,
-      tpe: InputType[_],
-      input: Option[In],
-      fromScalarMiddleware: Option[(Any, InputType[_]) => Option[Either[Violation, Any]]])(implicit
-      um: InputUnmarshaller[In]): Either[Vector[Violation], Option[VariableValue]] = {
+    definition: ast.VariableDefinition,
+    tpe: InputType[_],
+    input: Option[In],
+    fromScalarMiddleware: Option[(Any, InputType[_]) => Option[Either[Violation, Any]]]
+  )(
+    implicit
+    um: InputUnmarshaller[In]
+  ): Either[Vector[Violation], Option[VariableValue]] = {
     val violations = isValidValue(tpe, input)
 
     if (violations.isEmpty) {

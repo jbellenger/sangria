@@ -54,6 +54,8 @@ lazy val root = project
 lazy val core = project
   .in(file("modules/core"))
   .withId("sangria-core")
+  // JMB TODO: this is probably not right
+  .dependsOn(marshalling)
   .settings(scalacSettings ++ shellSettings)
   .settings(
     name := "sangria",
@@ -65,8 +67,9 @@ lazy val core = project
       "org.parboiled" %% "parboiled" % "2.3.0",
       // AST Visitor
       "org.sangria-graphql" %% "macro-visit" % "0.1.3",
+      // JMB TODO: this is probably not right
       // Marshalling
-      "org.sangria-graphql" %% "sangria-marshalling-api" % "1.0.5",
+      // "org.sangria-graphql" %% "sangria-marshalling-api" % "1.0.5",
       // Streaming
       "org.sangria-graphql" %% "sangria-streaming-api" % "1.0.2",
       // Macros
@@ -97,6 +100,15 @@ lazy val benchmarks = project
     description := "Benchmarks of Sangria functionality"
   )
   .disablePlugins(MimaPlugin)
+
+// JMB TODO: I don't know anything about sbt and this is probably the wrong way
+// to add a locally-modifiable sangria-marshalling-api as a source
+// dependency to core
+lazy val marshalling = project
+  .in(file("sangria-marshalling-api"))
+  .withId("sangria-marshalling-api")
+  .settings(scalacSettings ++ shellSettings ++ noPublishSettings)
+
 
 /* Commonly used functionality across the projects
  */
