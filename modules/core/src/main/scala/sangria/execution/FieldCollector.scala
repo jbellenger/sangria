@@ -100,6 +100,9 @@ class FieldCollector[Ctx, Val](
     directives: Vector[ast.Directive],
     selection: ast.WithDirectives
   ): Try[Boolean] = {
+    Success(true)
+    // JMB TODO: disabled for now. This is a significant hot spot and looks like it could be implemented as a QueryValidator
+    /*
     val possibleDirs = directives
       .map(d =>
         schema.directivesByName
@@ -194,6 +197,7 @@ class FieldCollector[Ctx, Val](
 
         Success(should)
       }
+     */
   }
 
   def doesFragmentConditionMatch(
