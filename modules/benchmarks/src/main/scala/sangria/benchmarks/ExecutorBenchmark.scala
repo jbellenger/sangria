@@ -9,7 +9,7 @@ import scala.concurrent.duration.Duration
 
 @State(Scope.Thread)
 class ExecutorBenchmark {
-  @Param(Array("Value", "Deferred"))
+  @Param(Array("Deferred"))
   var mode: String = _
 
   @Param(Array("150"))
