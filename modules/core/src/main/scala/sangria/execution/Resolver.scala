@@ -158,10 +158,9 @@ class Resolver[Ctx](
    */
   private def resolveDeferredWithGrouping(
     deferred: Seq[Future[Array[Defer]]]
-  ): Future[Vector[Vector[Defer]]] =
+  ): Future[Seq[Seq[Defer]]] =
     Future
-      .sequence(deferred).map(listOfDef =>
-        deferredResolver.groupDeferred(listOfDef.flatten.toVector))
+      .sequence(deferred).map(listOfDef => deferredResolver.groupDeferred(listOfDef.flatten))
 
   /**
    * Resolve a selection set sequentially and realize deferments.
@@ -571,7 +570,7 @@ class Resolver[Ctx](
    * You're maybe wondering why this doesn't return anything. That's because
    * resolution of Defer's works by mutating a [[Promise]] on each Defer
    */
-  private def resolveDeferred(uc: Ctx, toResolve: Vector[Defer]): Unit = {
+  private def resolveDeferred(uc: Ctx, toResolve: Seq[Defer]): Unit = {
     if (toResolve.nonEmpty) {
       def findActualDeferred(deferred: Deferred[_]): Deferred[_] = deferred match {
         case MappingDeferred(d, _) => findActualDeferred(d)
@@ -967,20 +966,6 @@ class Resolver[Ctx](
   }
 
   private type Actions = (ErrorRegistry, CollectedActions)
-
-  private sealed trait CollectedActions2
-  private object CollectedActions2 {
-    case object None extends CollectedActions2
-    case object Empty extends CollectedActions2
-
-    case class ResolvedAction(
-      schemaField: Field[Ctx, _],
-      update: Option[MappedCtxUpdate[Ctx, Any, Any]],
-      action: LeafAction[Ctx, _])
-    case class Actions(fields: Array[ast.Field], schemaField: Field[Ctx, _], action: ResolvedAction)
-  }
-
-  private case class Actions2(errors: ErrorRegistry, actions: CollectedActions2)
 
   /**
    * A normalized interface for the outputs of a field resolver

@@ -10,19 +10,29 @@ trait DeferredResolver[-Ctx] {
   def includeDeferredFromField: Option[(Field[_, _], Vector[ast.Field], Args, Double) => Boolean] =
     None
 
-  def groupDeferred[T <: DeferredWithInfo](deferred: Vector[T]): Vector[Vector[T]] =
-    Vector(deferred)
+  def groupDeferred[T <: DeferredWithInfo](deferred: Seq[T]): Seq[Seq[T]] =
+    Seq(deferred)
 
   def initialQueryState: Any = ()
 
-  def resolve(deferred: Vector[Deferred[Any]], ctx: Ctx, queryState: Any)(implicit
-      ec: ExecutionContext): Vector[Future[Any]]
+  def resolve(
+    deferred: Seq[Deferred[Any]],
+    ctx: Ctx,
+    queryState: Any
+  )(
+    implicit ec: ExecutionContext
+  ): Seq[Future[Any]]
 }
 
 object DeferredResolver {
   val empty = new DeferredResolver[Any] {
-    override def resolve(deferred: Vector[Deferred[Any]], ctx: Any, queryState: Any)(implicit
-        ec: ExecutionContext) =
+    override def resolve(
+      deferred: Seq[Deferred[Any]],
+      ctx: Any,
+      queryState: Any
+    )(
+      implicit ec: ExecutionContext
+    ) =
       deferred.map(d => Future.failed(UnsupportedDeferError(d)))
   }
 }
