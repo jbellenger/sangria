@@ -3,12 +3,14 @@ package sangria.benchmarks
 import org.openjdk.jmh.annotations._
 import org.openjdk.jmh.infra.Blackhole
 import sangria.ast.Document
-import sangria.execution.Executor
+import sangria.execution.{Executor, PreparedQuery}
+import sangria.marshalling.ScalaInput
 import sangria.parser.QueryParser
 import sangria.schema._
+import sangria.util.tag.@@
 import sangria.validation.QueryValidator
 import scala.annotation.tailrec
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
 
 // TODO: figure out if there is any interplay between Scope.Thread and the
@@ -26,6 +28,8 @@ class ExecutorBenchmark {
   private var executor: Executor[UCtx, Any] = _
   private var query: Document = _
 
+  private var prep: Future[PreparedQuery[UCtx, Any, Map[String, Any] @@ ScalaInput]] = _
+
   @Setup
   def setup(): Unit = {
     query = mkQuery(breadth, depth)
@@ -37,11 +41,20 @@ class ExecutorBenchmark {
       // Let's disable query validation for maximum speed.
       queryValidator = QueryValidator.empty
     )(scala.concurrent.ExecutionContext.global)
+
+    prep = executor.prepare(query, (), ())
   }
 
   @Benchmark
   def bench(bh: Blackhole): Unit = {
     val fut = executor.execute(query, (), ())
+    val result = Await.result(fut, Duration.Inf)
+    bh.consume(result)
+  }
+
+  @Benchmark
+  def prepared(bh: Blackhole): Unit = {
+    val fut = prep.map(_.execute())(scala.concurrent.ExecutionContext.global)
     val result = Await.result(fut, Duration.Inf)
     bh.consume(result)
   }
